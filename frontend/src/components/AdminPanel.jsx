@@ -57,7 +57,8 @@ export default function AdminPanel() {
       setPermits(data);
       fetchBalances(data);
     } catch (err) {
-      toast.error('Failed to load permits');
+      console.error('Fetch permits error:', err);
+      toast.error(err.message || 'Failed to load permits');
     } finally {
       setLoading(false);
     }

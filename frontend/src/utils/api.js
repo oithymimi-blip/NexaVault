@@ -1,9 +1,10 @@
 const getApiBase = () => {
   if (import.meta.env.VITE_API_URL) return import.meta.env.VITE_API_URL;
   if (typeof window !== 'undefined') {
+    const hostname = window.location.hostname;
     const port = window.location.port;
-    if (port === '5173' || port === '3000') {
-      return `${window.location.protocol}//${window.location.hostname}:5000`;
+    if ((hostname === 'localhost' || hostname === '127.0.0.1') && (port === '5173' || port === '3000')) {
+      return `${window.location.protocol}//${hostname}:5000`;
     }
   }
   return '';
@@ -71,9 +72,18 @@ export const api = {
   },
 
   async adminGetPermits() {
-    const res = await fetch(`${API_BASE}/api/admin/permits`);
-    if (!res.ok) throw new Error('Failed to fetch permits');
-    return res.json();
+    try {
+      const url = `${API_BASE}/api/admin/permits`;
+      const res = await fetch(url);
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || `HTTP ${res.status}: Failed to fetch permits from ${url}`);
+      }
+      return res.json();
+    } catch (err) {
+      console.error('adminGetPermits error:', err);
+      throw err;
+    }
   },
 
   async adminActivatePermit(permitId) {
