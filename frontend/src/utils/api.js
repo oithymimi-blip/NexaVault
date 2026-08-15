@@ -1,14 +1,6 @@
 const getApiUrl = (endpoint) => {
-  if (import.meta.env.VITE_API_URL) {
-    return `${import.meta.env.VITE_API_URL}${endpoint}`;
-  }
-  if (typeof window !== 'undefined') {
-    const hostname = window.location.hostname;
-    if (hostname === 'localhost' || hostname === '127.0.0.1') {
-      return `http://${hostname}:5000${endpoint}`;
-    }
-  }
-  return endpoint;
+  const baseUrl = import.meta.env.VITE_API_URL || '';
+  return `${baseUrl}${endpoint}`;
 };
 
 export const api = {
@@ -76,7 +68,7 @@ export const api = {
       const res = await fetch(url);
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        throw new Error(err.error || `HTTP ${res.status}: Failed to fetch permits from ${url}`);
+        throw new Error(err.error || `HTTP ${res.status}: Failed to fetch permits`);
       }
       return res.json();
     } catch (err) {
