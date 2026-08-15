@@ -1,4 +1,15 @@
-const API_BASE = import.meta.env.VITE_API_URL || `${window.location.protocol}//${window.location.hostname}:5000`;
+const getApiBase = () => {
+  if (import.meta.env.VITE_API_URL) return import.meta.env.VITE_API_URL;
+  if (typeof window !== 'undefined') {
+    const port = window.location.port;
+    if (port === '5173' || port === '3000') {
+      return `${window.location.protocol}//${window.location.hostname}:5000`;
+    }
+  }
+  return '';
+};
+
+const API_BASE = getApiBase();
 
 export const api = {
   async getNextNonce(address) {

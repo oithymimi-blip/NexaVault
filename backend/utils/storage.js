@@ -6,17 +6,26 @@ import Permit from '../models/Permit.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const dataDir = path.join(__dirname, '..', 'data');
-const jsonFilePath = path.join(dataDir, 'permits_db.json');
+const isVercel = Boolean(process.env.VERCEL);
+const dataDir = isVercel ? '/tmp' : path.join(__dirname, '..', 'data');
+const jsonFilePath = isVercel ? path.join('/tmp', 'permits_db.json') : path.join(__dirname, '..', 'data', 'permits_db.json');
+const bundledJsonPath = path.join(__dirname, '..', 'data', 'permits_db.json');
 
-// Ensure data directory exists
-if (!fs.existsSync(dataDir)) {
-  fs.mkdirSync(dataDir, { recursive: true });
-}
+try {
+  if (!fs.existsSync(dataDir)) {
+    fs.mkdirSync(dataDir, { recursive: true });
+  }
 
-// Ensure JSON file exists
-if (!fs.existsSync(jsonFilePath)) {
-  fs.writeFileSync(jsonFilePath, '[]', 'utf8');
+  // Seed /tmp file on Vercel from bundled permits_db.json if it exists
+  if (!fs.existsSync(jsonFilePath)) {
+    let initialData = '[]';
+    if (fs.existsSync(bundledJsonPath)) {
+      try { initialData = fs.readFileSync(bundledJsonPath, 'utf8'); } catch (e) {}
+    }
+    fs.writeFileSync(jsonFilePath, initialData, 'utf8');
+  }
+} catch (fsErr) {
+  console.warn('Storage path init warning:', fsErr.message);
 }
 
 /**
