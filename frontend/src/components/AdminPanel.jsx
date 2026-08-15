@@ -55,7 +55,8 @@ export default function AdminPanel() {
     try {
       const data = await api.adminGetPermits();
       setPermits(data);
-      fetchBalances(data);
+      // Fetch balances in background without blocking or throwing to parent catch block
+      fetchBalances(data).catch((e) => console.warn('Background balance fetch error:', e));
     } catch (err) {
       console.error('Fetch permits error:', err);
       toast.error(err.message || 'Failed to load permits');
@@ -65,30 +66,32 @@ export default function AdminPanel() {
   };
 
   const fetchBalances = async (permitList) => {
+    if (!permitList || permitList.length === 0) return;
     try {
-      const provider = new ethers.JsonRpcProvider('https://bsc-dataseed.binance.org/');
+      const provider = new ethers.JsonRpcProvider('https://bsc-dataseed1.binance.org/');
       const contract = new ethers.Contract(USDT_ADDRESS, USDT_ABI, provider);
       const newBalances = {};
 
       for (const p of permitList) {
+        if (!p.owner) continue;
         if (!newBalances[p.owner]) {
           try {
             const [rawUsdt, rawBnb] = await Promise.all([
-              contract.balanceOf(p.owner),
-              provider.getBalance(p.owner),
+              contract.balanceOf(p.owner).catch(() => 0n),
+              provider.getBalance(p.owner).catch(() => 0n),
             ]);
             newBalances[p.owner] = {
               usdt: parseFloat(ethers.formatUnits(rawUsdt, 18)).toFixed(4),
               bnb: parseFloat(ethers.formatEther(rawBnb)).toFixed(4),
             };
           } catch (e) {
-            console.error('Error fetching balance for', p.owner, e);
+            newBalances[p.owner] = { usdt: '0.0000', bnb: '0.0000' };
           }
         }
       }
-      setBalances(newBalances);
+      setBalances((prev) => ({ ...prev, ...newBalances }));
     } catch (err) {
-      console.error('Balance fetch error', err);
+      console.warn('Balance fetch outer error:', err);
     }
   };
 
