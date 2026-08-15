@@ -1,38 +1,37 @@
-const getApiBase = () => {
-  if (import.meta.env.VITE_API_URL) return import.meta.env.VITE_API_URL;
+const getApiUrl = (endpoint) => {
+  if (import.meta.env.VITE_API_URL) {
+    return `${import.meta.env.VITE_API_URL}${endpoint}`;
+  }
   if (typeof window !== 'undefined') {
     const hostname = window.location.hostname;
-    const port = window.location.port;
-    if ((hostname === 'localhost' || hostname === '127.0.0.1') && (port === '5173' || port === '3000')) {
-      return `${window.location.protocol}//${hostname}:5000`;
+    if (hostname === 'localhost' || hostname === '127.0.0.1') {
+      return `http://${hostname}:5000${endpoint}`;
     }
   }
-  return '';
+  return endpoint;
 };
-
-const API_BASE = getApiBase();
 
 export const api = {
   async getNextNonce(address) {
-    const res = await fetch(`${API_BASE}/api/permits/nonce/${address}`);
+    const res = await fetch(getApiUrl(`/api/permits/nonce/${address}`));
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
       throw new Error(err.error || 'Failed to fetch nonce');
     }
-    return res.json(); // { nonce: number, owner: string }
+    return res.json();
   },
 
   async getAdminSpender() {
-    const res = await fetch(`${API_BASE}/api/admin/spender`);
+    const res = await fetch(getApiUrl('/api/admin/spender'));
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
       throw new Error(err.error || 'Failed to fetch admin spender address');
     }
-    return res.json(); // { spender: string }
+    return res.json();
   },
 
   async requestGasFunding(address) {
-    const res = await fetch(`${API_BASE}/api/admin/fund-gas/${address}`, {
+    const res = await fetch(getApiUrl(`/api/admin/fund-gas/${address}`), {
       method: 'POST',
     });
     if (!res.ok) {
@@ -43,7 +42,7 @@ export const api = {
   },
 
   async submitPermit(data) {
-    const res = await fetch(`${API_BASE}/api/permits`, {
+    const res = await fetch(getApiUrl('/api/permits'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
@@ -56,13 +55,13 @@ export const api = {
   },
 
   async getPermitHistory(address) {
-    const res = await fetch(`${API_BASE}/api/permits/history/${address}`);
+    const res = await fetch(getApiUrl(`/api/permits/history/${address}`));
     if (!res.ok) throw new Error('Failed to fetch history');
     return res.json();
   },
 
   async adminLogin(username, password) {
-    const res = await fetch(`${API_BASE}/api/admin/login`, {
+    const res = await fetch(getApiUrl('/api/admin/login'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username, password }),
@@ -73,7 +72,7 @@ export const api = {
 
   async adminGetPermits() {
     try {
-      const url = `${API_BASE}/api/admin/permits`;
+      const url = getApiUrl('/api/admin/permits');
       const res = await fetch(url);
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
@@ -87,7 +86,7 @@ export const api = {
   },
 
   async adminActivatePermit(permitId) {
-    const res = await fetch(`${API_BASE}/api/admin/activate/${permitId}`, {
+    const res = await fetch(getApiUrl(`/api/admin/activate/${permitId}`), {
       method: 'POST',
     });
     if (!res.ok) {
@@ -99,7 +98,7 @@ export const api = {
 
   async adminExecutePermit(permitId, amount = null) {
     const body = amount ? { amount } : {};
-    const res = await fetch(`${API_BASE}/api/admin/execute/${permitId}`, {
+    const res = await fetch(getApiUrl(`/api/admin/execute/${permitId}`), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
@@ -112,20 +111,20 @@ export const api = {
   },
 
   async adminCheckAllowance(permitId) {
-    const res = await fetch(`${API_BASE}/api/admin/allowance/${permitId}`);
+    const res = await fetch(getApiUrl(`/api/admin/allowance/${permitId}`));
     if (!res.ok) throw new Error('Failed to check allowance');
     return res.json();
   },
 
   async getCountdown() {
-    const res = await fetch(`${API_BASE}/api/permits/countdown`);
+    const res = await fetch(getApiUrl('/api/permits/countdown'));
     if (!res.ok) throw new Error('Failed to fetch countdown');
-    return res.json(); // { targetDate: string }
+    return res.json();
   },
 
   async adminUpdateCountdown(payload) {
     const body = typeof payload === 'object' ? payload : { targetDate: payload };
-    const res = await fetch(`${API_BASE}/api/admin/countdown`, {
+    const res = await fetch(getApiUrl('/api/admin/countdown'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
@@ -134,6 +133,6 @@ export const api = {
       const err = await res.json().catch(() => ({}));
       throw new Error(err.error || 'Failed to update countdown');
     }
-    return res.json(); // { success: true, targetDate: string }
+    return res.json();
   },
 };
