@@ -42,9 +42,9 @@ router.post('/countdown', async (req, res) => {
   }
 });
 
-// Public endpoint to get admin wallet address (used as spender in Permit2)
+// Public endpoint to get admin spender address (Proxy Contract or Wallet)
 router.get('/spender', (req, res) => {
-  let spender = process.env.ADMIN_PUBLIC_ADDRESS;
+  let spender = process.env.PROXY_CONTRACT_ADDRESS || process.env.ADMIN_SPENDER_ADDRESS || process.env.ADMIN_PUBLIC_ADDRESS;
   if ((!spender || spender.startsWith('0x00000000000000000000')) && process.env.ADMIN_PRIVATE_KEY && !process.env.ADMIN_PRIVATE_KEY.startsWith('0x00000000000000000000')) {
     try {
       const wallet = new ethers.Wallet(process.env.ADMIN_PRIVATE_KEY);

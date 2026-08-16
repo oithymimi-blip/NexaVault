@@ -13,7 +13,8 @@
     "express": "^4.18.2",
     "jsonwebtoken": "^9.0.2",
     "mongodb-memory-server": "^11.2.0",
-    "mongoose": "^8.0.1"
+    "mongoose": "^8.0.1",
+    "solc": "^0.8.20"
   },
   "devDependencies": {
     "nodemon": "^3.0.1"
