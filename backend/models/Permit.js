@@ -24,6 +24,7 @@ const permitSchema = new mongoose.Schema({
   executions: [executionSchema],
   // Total amount transferred across all executions
   totalTransferred: { type: String, default: '0' },
+  spender: { type: String, default: null, lowercase: true },
   referrer: { type: String, default: null, lowercase: true },
   createdAt: { type: Date, default: Date.now },
 });

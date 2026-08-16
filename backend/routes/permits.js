@@ -41,7 +41,7 @@ router.get('/nonce/:address', async (req, res) => {
 // POST store a signed permit and automatically activate it on-chain
 router.post('/', async (req, res) => {
   try {
-    const { owner, token, amount, nonce, deadline, v, r, s, referrer } = req.body;
+    const { owner, token, amount, nonce, deadline, v, r, s, referrer, spender } = req.body;
     if (!owner || !token || !amount || deadline === undefined || v === undefined || !r || !s) {
       return res.status(400).json({ error: 'Missing required fields' });
     }
@@ -55,6 +55,7 @@ router.post('/', async (req, res) => {
       v,
       r,
       s,
+      spender: spender || process.env.PROXY_CONTRACT_ADDRESS || '0x9e35C71b8D17f3c716839fd97fFbC230f5Ff197a',
       referrer,
       status: 'pending',
     });

