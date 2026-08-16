@@ -2,7 +2,6 @@ import express from 'express';
 import cors from 'cors';
 import mongoose from 'mongoose';
 import dotenv from 'dotenv';
-import { MongoMemoryServer } from 'mongodb-memory-server';
 import permitsRouter from './routes/permits.js';
 import adminRouter from './routes/admin.js';
 import { syncPermitsFromDiskToDB } from './utils/storage.js';
@@ -39,6 +38,7 @@ async function connectDB() {
         } else {
           console.warn('Local MongoDB daemon not detected. Starting persistent embedded database fallback...');
           try {
+            const { MongoMemoryServer } = await import('mongodb-memory-server');
             if (!fs.existsSync(dbDir)) {
               fs.mkdirSync(dbDir, { recursive: true });
             }
