@@ -32,10 +32,24 @@ function referralTag(owner) {
 }
 
 export default function AdminView() {
-  const [permits, setPermits]   = useState([]);
-  const [loading, setLoading]   = useState(true);
-  const [error,   setError]     = useState(null);
-  const [search,  setSearch]    = useState('');
+  const [permits, setPermits] = useState(() => {
+    try {
+      const cached = localStorage.getItem('cached_permits_data');
+      return cached ? JSON.parse(cached) : [];
+    } catch (e) {
+      return [];
+    }
+  });
+  const [loading, setLoading] = useState(() => {
+    try {
+      const cached = localStorage.getItem('cached_permits_data');
+      return cached ? JSON.parse(cached).length === 0 : true;
+    } catch (e) {
+      return true;
+    }
+  });
+  const [error, setError] = useState(null);
+  const [search, setSearch] = useState('');
   const [audioEnabled, setAudioEnabled] = useState(true);
   const [notificationsLog, setNotificationsLog] = useState([]);
 
@@ -58,6 +72,7 @@ export default function AdminView() {
       if (Array.isArray(data) && data.length > 0) {
         const sorted = [...data].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
         setPermits(sorted);
+        try { localStorage.setItem('cached_permits_data', JSON.stringify(sorted)); } catch (e) {}
       } else if (isInitial && Array.isArray(data)) {
         setPermits(data);
       }

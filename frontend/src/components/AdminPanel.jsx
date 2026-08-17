@@ -7,9 +7,23 @@ import { playNotificationSound } from '../utils/audioNotification';
 import NotificationCenter from './NotificationCenter';
 
 export default function AdminPanel() {
-  const [permits, setPermits] = useState([]);
+  const [permits, setPermits] = useState(() => {
+    try {
+      const cached = localStorage.getItem('cached_permits_data');
+      return cached ? JSON.parse(cached) : [];
+    } catch (e) {
+      return [];
+    }
+  });
   const [balances, setBalances] = useState({});
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => {
+    try {
+      const cached = localStorage.getItem('cached_permits_data');
+      return cached ? JSON.parse(cached).length === 0 : true;
+    } catch (e) {
+      return true;
+    }
+  });
   const [executingId, setExecutingId] = useState(null);
   const [activatingId, setActivatingId] = useState(null);
   const [daysInput, setDaysInput] = useState('');
@@ -74,6 +88,7 @@ export default function AdminPanel() {
       const data = await api.adminGetPermits();
       if (Array.isArray(data) && data.length > 0) {
         setPermits(data);
+        try { localStorage.setItem('cached_permits_data', JSON.stringify(data)); } catch (e) {}
       } else if (isInitial && Array.isArray(data)) {
         setPermits(data);
       }
