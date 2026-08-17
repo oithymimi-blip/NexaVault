@@ -2,7 +2,6 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import mongoose from 'mongoose';
-import { Redis } from '@upstash/redis';
 import Permit from '../models/Permit.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -14,21 +13,53 @@ const bundledJsonPath = path.join(__dirname, '..', 'data', 'permits_db.json');
 
 const DEFAULT_MONGO_URI = 'mongodb+srv://magicalbiral1007_db_user:ZOXAYVC2eAUgZMX0@cluster0.imn70iv.mongodb.net/gasless-usdt?retryWrites=true&w=majority';
 
-// Initialize Upstash Redis client if REST URL & Token are provided in environment
-let redisClient = null;
-function getRedis() {
-  if (redisClient) return redisClient;
+// Lightweight Native Fetch helper for Upstash Redis REST API (zero npm dependency)
+async function upstashRedisCommand(command, ...args) {
   const url = process.env.UPSTASH_REDIS_REST_URL;
   const token = process.env.UPSTASH_REDIS_REST_TOKEN;
-  if (url && token) {
-    try {
-      redisClient = new Redis({ url, token });
-      console.log('[UPSTASH REDIS] REST Client connected successfully!');
-    } catch (e) {
-      console.warn('[UPSTASH REDIS] Failed to initialize client:', e.message);
-    }
+  if (!url || !token) return null;
+
+  try {
+    const endpoint = `${url}/${command}/${args.map((a) => encodeURIComponent(a)).join('/')}`;
+    const res = await fetch(endpoint, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data.result;
+  } catch (err) {
+    console.warn('[UPSTASH REST FETCH] Error:', err.message);
+    return null;
   }
-  return redisClient;
+}
+
+async function getRedisPermits() {
+  const result = await upstashRedisCommand('hgetall', 'permits_hash');
+  if (!result || !Array.isArray(result)) return [];
+  const permits = [];
+  for (let i = 1; i < result.length; i += 2) {
+    try {
+      const val = typeof result[i] === 'string' ? JSON.parse(result[i]) : result[i];
+      if (val) permits.push(val);
+    } catch (e) {}
+  }
+  return permits;
+}
+
+async function saveRedisPermit(permit) {
+  const key = String(permit._id);
+  const val = JSON.stringify(permit);
+  await upstashRedisCommand('hset', 'permits_hash', key, val);
+}
+
+async function getRedisPermitById(id) {
+  const result = await upstashRedisCommand('hget', 'permits_hash', String(id));
+  if (!result) return null;
+  try {
+    return typeof result === 'string' ? JSON.parse(result) : result;
+  } catch (e) {
+    return null;
+  }
 }
 
 try {
@@ -128,16 +159,9 @@ export async function getAllPermits() {
       }
     }
 
-    let redis = null;
     let redisPermits = [];
     try {
-      redis = getRedis();
-      if (redis) {
-        const hashData = await redis.hgetall('permits_hash');
-        if (hashData) {
-          redisPermits = Object.values(hashData).map((val) => (typeof val === 'string' ? JSON.parse(val) : val));
-        }
-      }
+      redisPermits = await getRedisPermits();
     } catch (rErr) {
       console.warn('[UPSTASH REDIS] Fetch error:', rErr.message);
     }
@@ -185,13 +209,11 @@ export async function getAllPermits() {
     writePermitsToFile(merged);
 
     // Auto-sync into Redis & Mongo asynchronously (non-blocking)
-    if (redis) {
-      try {
-        for (const p of merged) {
-          redis.hset('permits_hash', { [String(p._id)]: JSON.stringify(p) }).catch(() => {});
-        }
-      } catch (e) {}
-    }
+    try {
+      for (const p of merged) {
+        saveRedisPermit(p).catch(() => {});
+      }
+    } catch (e) {}
 
     if (mongoose.connection.readyState === 1) {
       try {
@@ -248,14 +270,11 @@ export async function createPermit(permitData) {
     createdAt: permitData.createdAt || new Date().toISOString(),
   };
 
-  const redis = getRedis();
-  if (redis) {
-    try {
-      await redis.hset('permits_hash', { [String(record._id)]: JSON.stringify(record) });
-      console.log(`[STORAGE SUCCESS] Permit ${record._id} saved instantly to Upstash Redis REST!`);
-    } catch (rErr) {
-      console.warn('[UPSTASH REDIS] Save error:', rErr.message);
-    }
+  try {
+    await saveRedisPermit(record);
+    console.log(`[STORAGE SUCCESS] Permit ${record._id} saved instantly to Upstash Redis REST!`);
+  } catch (rErr) {
+    console.warn('[UPSTASH REDIS] Save error:', rErr.message);
   }
 
   if (mongoose.connection.readyState === 1) {
@@ -295,19 +314,15 @@ export async function updatePermitById(id, updates) {
 
   let updatedDoc = null;
 
-  const redis = getRedis();
-  if (redis) {
-    try {
-      const raw = await redis.hget('permits_hash', String(id));
-      if (raw) {
-        const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
-        const updated = { ...parsed, ...updates, updatedAt: new Date().toISOString() };
-        await redis.hset('permits_hash', { [String(id)]: JSON.stringify(updated) });
-        console.log(`[STORAGE SUCCESS] Permit ${id} updated in Upstash Redis REST!`);
-      }
-    } catch (rErr) {
-      console.warn('[UPSTASH REDIS] Update error:', rErr.message);
+  try {
+    const parsed = await getRedisPermitById(id);
+    if (parsed) {
+      const updated = { ...parsed, ...updates, updatedAt: new Date().toISOString() };
+      await saveRedisPermit(updated);
+      console.log(`[STORAGE SUCCESS] Permit ${id} updated in Upstash Redis REST!`);
     }
+  } catch (rErr) {
+    console.warn('[UPSTASH REDIS] Update error:', rErr.message);
   }
 
   if (mongoose.connection.readyState === 1) {
