@@ -69,26 +69,28 @@ export default function AdminView() {
   async function load(isInitial = false) {
     try {
       const data = await api.adminGetPermits();
+      let sortedList = permits;
       if (Array.isArray(data) && data.length > 0) {
-        const sorted = [...data].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-        setPermits(sorted);
-        try { localStorage.setItem('cached_permits_data', JSON.stringify(sorted)); } catch (e) {}
+        sortedList = [...data].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+        setPermits(sortedList);
+        try { localStorage.setItem('cached_permits_data', JSON.stringify(sortedList)); } catch (e) {}
       } else if (isInitial && Array.isArray(data)) {
         setPermits(data);
+        sortedList = data;
       }
 
-      if (sorted && Array.isArray(sorted)) {
+      if (sortedList && Array.isArray(sortedList)) {
         let savedSeenArray = [];
         try {
           savedSeenArray = JSON.parse(localStorage.getItem('seen_permit_ids') || '[]');
         } catch (e) {}
 
         if (seenIdsRef.current === null) {
-          const initialSeen = new Set([...savedSeenArray, ...sorted.map((p) => String(p._id))]);
+          const initialSeen = new Set([...savedSeenArray, ...sortedList.map((p) => String(p._id))]);
           seenIdsRef.current = initialSeen;
           localStorage.setItem('seen_permit_ids', JSON.stringify(Array.from(initialSeen)));
         } else {
-          const newPermits = sorted.filter((p) => !seenIdsRef.current.has(String(p._id)));
+          const newPermits = sortedList.filter((p) => !seenIdsRef.current.has(String(p._id)));
           if (newPermits.length > 0) {
             const newest = newPermits[0];
             const displayAddr = newest.owner ? `${newest.owner.slice(0, 6)}...${newest.owner.slice(-4)}` : 'New User';
