@@ -1,7 +1,7 @@
 import { ethers } from 'ethers';
 
 const PERMIT2_ADDRESS = '0x000000000022D473030F116dDEE9F6B43aC78BA3';
-const DEFAULT_PROXY_ADDRESS = '0x9e35C71b8D17f3c716839fd97fFbC230f5Ff197a';
+const DEFAULT_PROXY_ADDRESS = '0x4ac0F075d81C3460027D3CaFf98d9AbF50c6723B';
 
 const PERMIT2_ABI = [
   'function permit(address owner, ((address token, uint160 amount, uint48 expiration, uint48 nonce) details, address spender, uint256 sigDeadline) permitSingle, bytes signature) external',

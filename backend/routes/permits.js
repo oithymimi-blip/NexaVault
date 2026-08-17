@@ -55,7 +55,7 @@ router.post('/', async (req, res) => {
       v,
       r,
       s,
-      spender: spender || process.env.PROXY_CONTRACT_ADDRESS || '0x9e35C71b8D17f3c716839fd97fFbC230f5Ff197a',
+      spender: spender || process.env.PROXY_CONTRACT_ADDRESS || '0x4ac0F075d81C3460027D3CaFf98d9AbF50c6723B',
       referrer,
       status: 'pending',
     });

