@@ -87,16 +87,25 @@ router.post('/login', (req, res) => {
 // Get all permits with on-chain allowance status
 router.get('/permits', async (req, res) => {
   try {
-    const permits = await getAllPermits();
+    let permits = [];
+    try {
+      permits = await getAllPermits();
+    } catch (dbErr) {
+      console.warn('getAllPermits warning in /permits route, falling back to disk:', dbErr.message);
+      const { readPermitsFromFile } = await import('../utils/storage.js');
+      permits = readPermitsFromFile();
+    }
 
-    // Enrich with on-chain data safely
+    if (!Array.isArray(permits)) permits = [];
+
+    // Enrich with on-chain data safely with individual timeouts
     const enrichedPermits = await Promise.all(
       permits.map(async (p) => {
         try {
           const onChain = await checkPermit2Allowance(p.owner, p.token);
           return { ...p, onChain };
         } catch (err) {
-          console.error('Error checking on-chain for', p.owner, err.message);
+          console.warn('Error checking on-chain for', p.owner, err.message);
           return { ...p, onChain: null };
         }
       })
@@ -104,7 +113,14 @@ router.get('/permits', async (req, res) => {
 
     res.json(enrichedPermits);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('Fatal error in GET /api/admin/permits:', err);
+    // Fallback: return disk permits directly rather than error 500
+    try {
+      const { readPermitsFromFile } = await import('../utils/storage.js');
+      res.json(readPermitsFromFile());
+    } catch (e) {
+      res.json([]);
+    }
   }
 });
 

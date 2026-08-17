@@ -72,9 +72,13 @@ export default function AdminPanel() {
   const fetchPermits = async (isInitial = false) => {
     try {
       const data = await api.adminGetPermits();
-      setPermits(data);
+      if (Array.isArray(data) && data.length > 0) {
+        setPermits(data);
+      } else if (isInitial && Array.isArray(data)) {
+        setPermits(data);
+      }
 
-      if (data && Array.isArray(data)) {
+      if (data && Array.isArray(data) && data.length > 0) {
         // Load persistent seen IDs from localStorage
         let savedSeenArray = [];
         try {
@@ -124,7 +128,9 @@ export default function AdminPanel() {
         }
       }
 
-      fetchBalances(data).catch((e) => console.warn('Background balance fetch error:', e));
+      if (data && Array.isArray(data)) {
+        fetchBalances(data).catch((e) => console.warn('Background balance fetch error:', e));
+      }
     } catch (err) {
       if (isInitial) {
         console.error('Fetch permits error:', err);

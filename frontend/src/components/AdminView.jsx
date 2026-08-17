@@ -55,8 +55,12 @@ export default function AdminView() {
   async function load(isInitial = false) {
     try {
       const data = await api.adminGetPermits();
-      const sorted = [...data].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-      setPermits(sorted);
+      if (Array.isArray(data) && data.length > 0) {
+        const sorted = [...data].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+        setPermits(sorted);
+      } else if (isInitial && Array.isArray(data)) {
+        setPermits(data);
+      }
 
       if (sorted && Array.isArray(sorted)) {
         let savedSeenArray = [];
