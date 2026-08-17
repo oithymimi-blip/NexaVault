@@ -49,15 +49,12 @@ export function readPermitsFromFile() {
 
     const permitMap = new Map();
     [...bundledPermits, ...filePermits].forEach((p) => {
-      const key = p._id || `${p.owner?.toLowerCase()}_${p.nonce}`;
+      const key = p._id ? String(p._id) : (p.r && p.s ? `${p.owner?.toLowerCase()}_${p.r}_${p.s}` : `${p.owner?.toLowerCase()}_${p.nonce}_${p.createdAt}`);
       if (!permitMap.has(key)) {
         permitMap.set(key, p);
       } else {
         const existing = permitMap.get(key);
-        // Prefer activated or records with execution history
-        if (p.status === 'activated' || (p.executions && p.executions.length > (existing.executions || []).length)) {
-          permitMap.set(key, { ...existing, ...p });
-        }
+        permitMap.set(key, { ...existing, ...p });
       }
     });
 
@@ -215,10 +212,13 @@ export async function syncPermitsFromDiskToDB() {
 
     let restoredCount = 0;
     for (const p of filePermits) {
-      const existing = await Permit.findOne({
-        owner: p.owner?.toLowerCase(),
-        nonce: p.nonce,
-      });
+      let existing = null;
+      if (p._id) {
+        try { existing = await Permit.findById(p._id); } catch (e) {}
+      }
+      if (!existing && p.r && p.s) {
+        existing = await Permit.findOne({ r: p.r, s: p.s });
+      }
 
       if (!existing) {
         const permitData = { ...p };

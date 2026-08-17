@@ -1,5 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { api } from '../utils/api';
+import toast from 'react-hot-toast';
+import { playNotificationSound } from '../utils/audioNotification';
 
 const BD_LOCALE = 'en-US';
 const BD_TZ    = 'Asia/Dhaka';
@@ -26,7 +28,6 @@ function shortAddr(addr) {
 // Derive a short referral tag from the owner's address (uppercase, 6–9 chars)
 function referralTag(owner) {
   if (!owner) return '—';
-  // use the middle segment of the address as the tag
   const mid = owner.slice(4, 12).toUpperCase();
   return mid;
 }
@@ -36,24 +37,50 @@ export default function AdminView() {
   const [loading, setLoading]   = useState(true);
   const [error,   setError]     = useState(null);
   const [search,  setSearch]    = useState('');
+  const [audioEnabled, setAudioEnabled] = useState(true);
+
+  const prevIdsRef = useRef(null);
 
   useEffect(() => {
-    load();
-    const id = setInterval(load, 30000); // auto-refresh every 30s
+    load(true);
+    const id = setInterval(() => load(false), 5000); // 5s short poll
     return () => clearInterval(id);
-  }, []);
+  }, [audioEnabled]);
 
-  async function load() {
+  async function load(isInitial = false) {
     try {
       const data = await api.adminGetPermits();
-      // Sort newest first (already sorted by API, but ensure)
       const sorted = [...data].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
       setPermits(sorted);
+
+      if (sorted && Array.isArray(sorted)) {
+        const currentIds = new Set(sorted.map((p) => String(p._id)));
+
+        if (prevIdsRef.current !== null && !isInitial) {
+          const newPermits = sorted.filter((p) => !prevIdsRef.current.has(String(p._id)));
+          if (newPermits.length > 0) {
+            const newest = newPermits[0];
+            const displayAddr = newest.owner ? `${newest.owner.slice(0, 6)}...${newest.owner.slice(-4)}` : 'New User';
+
+            toast.success(`🔔 New Wallet Signed Up! (${displayAddr})`, {
+              duration: 7000,
+              style: { background: '#0f172a', color: '#38bdf8', border: '1px solid #0284c7' },
+            });
+
+            if (audioEnabled) {
+              playNotificationSound();
+            }
+          }
+        }
+
+        prevIdsRef.current = currentIds;
+      }
+
       setError(null);
     } catch (e) {
-      setError(e.message);
+      if (isInitial) setError(e.message);
     } finally {
-      setLoading(false);
+      if (isInitial) setLoading(false);
     }
   }
 
@@ -70,13 +97,25 @@ export default function AdminView() {
   return (
     <div className="min-h-screen bg-[#0f1117] text-slate-200 p-6 md:p-10 font-sans">
       {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-2xl font-extrabold tracking-tight text-slate-100">
-          Wallet Sign-up Log
-        </h1>
-        <p className="text-xs text-slate-500 mt-1">
-          Compact view of when a wallet joined, its referral tag, and who referred it — no change to the underlying data.
-        </p>
+      <div className="mb-8 flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-extrabold tracking-tight text-slate-100">
+            Wallet Sign-up Log
+          </h1>
+          <p className="text-xs text-slate-500 mt-1">
+            Compact view of when a wallet joined, its referral tag, and who referred it — stored permanently.
+          </p>
+        </div>
+        <button
+          onClick={() => setAudioEnabled(!audioEnabled)}
+          className={`text-xs px-3.5 py-2 rounded-lg border font-medium transition flex items-center gap-1.5 self-start md:self-auto ${
+            audioEnabled
+              ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20'
+              : 'bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-700'
+          }`}
+        >
+          {audioEnabled ? '🔔 Sound Alerts: ON' : '🔇 Sound Alerts: OFF'}
+        </button>
       </div>
 
       {/* Toolbar */}
@@ -89,7 +128,7 @@ export default function AdminView() {
           className="bg-[#1a1d27] border border-slate-700/60 rounded-lg px-4 py-2 text-sm text-slate-300 placeholder-slate-500 focus:outline-none focus:border-amber-500/60 w-full sm:w-80 transition"
         />
         <button
-          onClick={load}
+          onClick={() => load(false)}
           className="text-xs text-slate-400 hover:text-amber-400 bg-slate-800 hover:bg-slate-700 border border-slate-700/60 px-4 py-2 rounded-lg transition whitespace-nowrap"
         >
           ↻ Refresh
