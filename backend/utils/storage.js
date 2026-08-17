@@ -131,11 +131,16 @@ export async function getAllPermits() {
     }
   });
 
-  const merged = Array.from(permitMap.values());
+  const merged = Array.from(permitMap.values()).filter(
+    (p) => p && p.owner !== '0x8888888888888888888888888888888888888888'
+  );
   merged.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
 
   // Auto-sync any file permits into Mongo if missing from Mongo
   if (mongoose.connection.readyState === 1) {
+    // Delete any lingering test owner record from Mongo
+    try { await Permit.deleteMany({ owner: '0x8888888888888888888888888888888888888888' }); } catch (e) {}
+
     for (const p of merged) {
       const existsInMongo = mongoPermits.some(mp => String(mp._id) === String(p._id));
       if (!existsInMongo) {
