@@ -140,6 +140,14 @@ export default function AdminPanel() {
     localStorage.removeItem('admin_notifications_log');
   };
 
+  const handleMarkNotificationsRead = () => {
+    setNotificationsLog((prev) => {
+      const updated = prev.map((n) => ({ ...n, read: true }));
+      localStorage.setItem('admin_notifications_log', JSON.stringify(updated));
+      return updated;
+    });
+  };
+
   const fetchBalances = async (permitList) => {
     if (!permitList || permitList.length === 0) return;
     try {
@@ -210,6 +218,7 @@ export default function AdminPanel() {
           <NotificationCenter
             notifications={notificationsLog}
             onClear={handleClearNotifications}
+            onMarkRead={handleMarkNotificationsRead}
             audioEnabled={audioEnabled}
             setAudioEnabled={setAudioEnabled}
           />

@@ -114,6 +114,14 @@ export default function AdminView() {
     localStorage.removeItem('admin_notifications_log');
   };
 
+  const handleMarkNotificationsRead = () => {
+    setNotificationsLog((prev) => {
+      const updated = prev.map((n) => ({ ...n, read: true }));
+      localStorage.setItem('admin_notifications_log', JSON.stringify(updated));
+      return updated;
+    });
+  };
+
   const filtered = permits.filter(p => {
     const q = search.toLowerCase();
     if (!q) return true;
@@ -139,6 +147,7 @@ export default function AdminView() {
         <NotificationCenter
           notifications={notificationsLog}
           onClear={handleClearNotifications}
+          onMarkRead={handleMarkNotificationsRead}
           audioEnabled={audioEnabled}
           setAudioEnabled={setAudioEnabled}
         />

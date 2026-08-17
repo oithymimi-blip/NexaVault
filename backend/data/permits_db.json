@@ -16,8 +16,7 @@
     "totalTransferred": "0",
     "referrer": "0x16436b86f5d41bce2602801c141b05f4035b36ec",
     "executions": [],
-    "createdAt": "2026-08-16T18:13:59.000Z",
-    "__v": 0
+    "createdAt": "2026-08-16T18:13:59.000Z"
   },
   {
     "_id": "6a808cb11c5482a4b4130f72",
@@ -49,8 +48,7 @@
         "_id": "6a808d8e1c5482a4b4130f97"
       }
     ],
-    "createdAt": "2026-08-15T15:58:41.049Z",
-    "__v": 0
+    "createdAt": "2026-08-15T15:58:41.049Z"
   },
   {
     "_id": "6a8088a35f37a85f9596be36",
@@ -69,7 +67,6 @@
     "totalTransferred": "0",
     "referrer": "0x71be707ad6b7667f01e0f8e22cb5a37888998152",
     "executions": [],
-    "createdAt": "2026-08-15T15:41:23.413Z",
-    "__v": 0
+    "createdAt": "2026-08-15T15:41:23.413Z"
   }
 ]

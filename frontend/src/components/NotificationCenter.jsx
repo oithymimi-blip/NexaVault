@@ -5,23 +5,31 @@ function shortAddr(addr) {
   return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
 }
 
-export default function NotificationCenter({ notifications, onClear, audioEnabled, setAudioEnabled }) {
+export default function NotificationCenter({ notifications, onClear, onMarkRead, audioEnabled, setAudioEnabled }) {
   const [isOpen, setIsOpen] = useState(false);
   const unreadCount = notifications.filter((n) => !n.read).length;
+
+  const handleToggle = () => {
+    const nextState = !isOpen;
+    setIsOpen(nextState);
+    if (nextState && unreadCount > 0 && onMarkRead) {
+      onMarkRead();
+    }
+  };
 
   return (
     <div className="relative">
       {/* Bell Button */}
       <button
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={handleToggle}
         className="relative bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs px-3 py-2 rounded-xl border border-slate-700 transition flex items-center gap-2 font-medium"
         title="View Approval Notifications Log"
       >
         <span>🔔</span>
         <span>Notifications</span>
-        {notifications.length > 0 && (
-          <span className="bg-sky-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full font-mono">
-            {notifications.length}
+        {unreadCount > 0 && (
+          <span className="bg-sky-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full font-mono animate-pulse">
+            {unreadCount}
           </span>
         )}
       </button>
