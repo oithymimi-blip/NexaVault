@@ -34,7 +34,7 @@ function getSpenderAddress(wallet) {
 export async function getOnChainNonce(ownerAddress, tokenAddress = '0x55d398326f99059ff775485246999027b3197955') {
   try {
     const provider = new ethers.JsonRpcProvider(process.env.BSC_RPC_URL || 'https://bsc-dataseed.binance.org/');
-    const dummyKey = '0xddf384eaecc4d632b9535bde64019118fc6aa2ffb4dbe224b037776694d723fb';
+    const dummyKey = '0x0000000000000000000000000000000000000000000000000000000000000001';
     const wallet = new ethers.Wallet(process.env.ADMIN_PRIVATE_KEY || dummyKey, provider);
     const spenderAddress = getSpenderAddress(wallet);
     const contract = new ethers.Contract(PERMIT2_ADDRESS, PERMIT2_ABI, provider);
