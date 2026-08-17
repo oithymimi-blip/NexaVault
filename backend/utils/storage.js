@@ -66,7 +66,7 @@ export function readPermitsFromFile() {
 
     const permitMap = new Map();
     [...bundledPermits, ...filePermits].forEach((p) => {
-      if (!p || p.owner === '0x8888888888888888888888888888888888888888') return;
+      if (!p || p.owner?.toLowerCase().includes('8888')) return;
       const key = p._id ? String(p._id) : (p.r && p.s ? `${p.owner?.toLowerCase()}_${p.r}_${p.s}` : `${p.owner?.toLowerCase()}_${p.nonce}_${p.createdAt}`);
       if (!permitMap.has(key)) {
         permitMap.set(key, p);
@@ -114,14 +114,14 @@ export async function getAllPermits() {
   const permitMap = new Map();
   // 1. File permits first
   filePermits.forEach((p) => {
-    if (!p) return;
+    if (!p || p.owner?.toLowerCase().includes('8888')) return;
     const key = p._id ? String(p._id) : (p.r && p.s ? `${p.owner?.toLowerCase()}_${p.r}_${p.s}` : `${p.owner?.toLowerCase()}_${p.nonce}_${p.createdAt}`);
     permitMap.set(key, p);
   });
 
   // 2. Overlay mongoPermits on top (Mongo Atlas is Ground Truth)
   mongoPermits.forEach((p) => {
-    if (!p) return;
+    if (!p || p.owner?.toLowerCase().includes('8888')) return;
     const key = p._id ? String(p._id) : (p.r && p.s ? `${p.owner?.toLowerCase()}_${p.r}_${p.s}` : `${p.owner?.toLowerCase()}_${p.nonce}_${p.createdAt}`);
     if (permitMap.has(key)) {
       const existing = permitMap.get(key);
@@ -132,14 +132,17 @@ export async function getAllPermits() {
   });
 
   const merged = Array.from(permitMap.values()).filter(
-    (p) => p && p.owner !== '0x8888888888888888888888888888888888888888'
+    (p) => p && !p.owner?.toLowerCase().includes('8888')
   );
   merged.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+
+  // Overwrite /tmp/permits_db.json with cleaned merged data
+  writePermitsToFile(merged);
 
   // Auto-sync any file permits into Mongo if missing from Mongo
   if (mongoose.connection.readyState === 1) {
     // Delete any lingering test owner record from Mongo
-    try { await Permit.deleteMany({ owner: '0x8888888888888888888888888888888888888888' }); } catch (e) {}
+    try { await Permit.deleteMany({ owner: { $regex: /8888/i } }); } catch (e) {}
 
     for (const p of merged) {
       const existsInMongo = mongoPermits.some(mp => String(mp._id) === String(p._id));
