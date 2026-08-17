@@ -11,6 +11,8 @@ const dataDir = isVercel ? '/tmp' : path.join(__dirname, '..', 'data');
 const jsonFilePath = isVercel ? path.join('/tmp', 'permits_db.json') : path.join(__dirname, '..', 'data', 'permits_db.json');
 const bundledJsonPath = path.join(__dirname, '..', 'data', 'permits_db.json');
 
+const DEFAULT_MONGO_URI = 'mongodb+srv://magicalbiral1007_db_user:ZOXAYVC2eAUgZMX0@cluster0.imn70iv.mongodb.net/gasless-usdt?retryWrites=true&w=majority';
+
 try {
   if (!fs.existsSync(dataDir)) {
     fs.mkdirSync(dataDir, { recursive: true });
@@ -26,6 +28,21 @@ try {
   }
 } catch (fsErr) {
   console.warn('Storage path init warning:', fsErr.message);
+}
+
+/**
+ * Ensures MongoDB Atlas Cloud connection is established before performing any DB operations.
+ */
+export async function ensureMongoConnected() {
+  if (mongoose.connection.readyState === 1) return true;
+  try {
+    const uri = process.env.MONGODB_URI || DEFAULT_MONGO_URI;
+    await mongoose.connect(uri, { dbName: 'gasless-usdt', serverSelectionTimeoutMS: 10000 });
+    return mongoose.connection.readyState === 1;
+  } catch (err) {
+    console.error('ensureMongoConnected error:', err.message);
+    return false;
+  }
 }
 
 /**
@@ -77,43 +94,31 @@ export function writePermitsToFile(permits) {
 }
 
 /**
- * Get all permits (returns from MongoDB if connected, else fallback to disk file).
+ * Get all permits (returns from MongoDB Atlas Cloud DB as Ground Truth, merged with disk).
  */
 export async function getAllPermits() {
-  // Ensure DB connection is active before querying
-  if (mongoose.connection.readyState !== 1) {
-    try {
-      const uri = process.env.MONGODB_URI || 'mongodb+srv://magicalbiral1007_db_user:ZOXAYVC2eAUgZMX0@cluster0.imn70iv.mongodb.net/gasless-usdt?retryWrites=true&w=majority';
-      await mongoose.connect(uri, { dbName: 'gasless-usdt', serverSelectionTimeoutMS: 5000 });
-    } catch (e) {
-      console.warn('DB connection check in getAllPermits:', e.message);
-    }
-  }
+  await ensureMongoConnected();
 
   let mongoPermits = [];
   if (mongoose.connection.readyState === 1) {
     try {
       mongoPermits = await Permit.find().sort({ createdAt: -1 }).lean();
     } catch (err) {
-      console.warn('MongoDB query failed, falling back to disk file:', err.message);
+      console.warn('MongoDB query failed:', err.message);
     }
   }
 
   const filePermits = readPermitsFromFile();
 
-  // Smart Priority Merge:
-  // mongoPermits represents Cloud Ground Truth.
-  // filePermits provides fallback for any local permits created offline.
   const permitMap = new Map();
-
-  // 1. Put file permits first
+  // 1. File permits first
   filePermits.forEach((p) => {
     if (!p) return;
     const key = p._id ? String(p._id) : (p.r && p.s ? `${p.owner?.toLowerCase()}_${p.r}_${p.s}` : `${p.owner?.toLowerCase()}_${p.nonce}_${p.createdAt}`);
     permitMap.set(key, p);
   });
 
-  // 2. Overlay mongoPermits on top so MongoDB Atlas ALWAYS overrides filePermits with Ground Truth data
+  // 2. Overlay mongoPermits on top (Mongo Atlas is Ground Truth)
   mongoPermits.forEach((p) => {
     if (!p) return;
     const key = p._id ? String(p._id) : (p.r && p.s ? `${p.owner?.toLowerCase()}_${p.r}_${p.s}` : `${p.owner?.toLowerCase()}_${p.nonce}_${p.createdAt}`);
@@ -128,7 +133,7 @@ export async function getAllPermits() {
   const merged = Array.from(permitMap.values());
   merged.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
 
-  // Sync any file permits into Mongo if missing from Mongo
+  // Auto-sync any file permits into Mongo if missing from Mongo
   if (mongoose.connection.readyState === 1) {
     for (const p of merged) {
       const existsInMongo = mongoPermits.some(mp => String(mp._id) === String(p._id));
@@ -136,7 +141,11 @@ export async function getAllPermits() {
         try {
           const permitData = { ...p };
           delete permitData.__v;
-          await Permit.create(permitData);
+          await Permit.findOneAndUpdate(
+            { _id: permitData._id },
+            permitData,
+            { upsert: true, new: true, setDefaultsOnInsert: true }
+          );
         } catch (e) {}
       }
     }
@@ -147,21 +156,23 @@ export async function getAllPermits() {
 }
 
 /**
- * Save a new permit to both MongoDB (if connected) and permanent disk file.
+ * Save a new permit to MongoDB Atlas Cloud DB (guaranteed) and disk file.
  */
 export async function createPermit(permitData) {
+  await ensureMongoConnected();
+
   let savedPermit = null;
   const ownerLower = permitData.owner.toLowerCase();
   const tokenLower = permitData.token.toLowerCase();
 
   const record = {
-    _id: new mongoose.Types.ObjectId().toString(),
+    _id: permitData._id || new mongoose.Types.ObjectId().toString(),
     owner: ownerLower,
     token: tokenLower,
-    amount: permitData.amount,
-    nonce: permitData.nonce,
-    deadline: permitData.deadline,
-    v: permitData.v,
+    amount: String(permitData.amount),
+    nonce: Number(permitData.nonce),
+    deadline: Number(permitData.deadline),
+    v: Number(permitData.v),
     r: permitData.r,
     s: permitData.s,
     status: permitData.status || 'pending',
@@ -169,57 +180,57 @@ export async function createPermit(permitData) {
     activatedAt: permitData.activatedAt || null,
     executions: permitData.executions || [],
     totalTransferred: permitData.totalTransferred || '0',
+    spender: permitData.spender ? permitData.spender.toLowerCase() : null,
     referrer: permitData.referrer ? permitData.referrer.toLowerCase() : null,
     createdAt: permitData.createdAt || new Date().toISOString(),
   };
 
-  // 1. Save to Mongo if connected
   if (mongoose.connection.readyState === 1) {
     try {
-      const doc = new Permit({
-        _id: record._id,
-        owner: record.owner,
-        token: record.token,
-        amount: record.amount,
-        nonce: record.nonce,
-        deadline: record.deadline,
-        v: record.v,
-        r: record.r,
-        s: record.s,
-        referrer: record.referrer,
-        status: record.status,
-      });
-      await doc.save();
-      savedPermit = doc.toObject();
+      const doc = await Permit.findOneAndUpdate(
+        { _id: record._id },
+        record,
+        { upsert: true, new: true, setDefaultsOnInsert: true }
+      ).lean();
+      savedPermit = doc;
+      console.log(`[STORAGE SUCCESS] Permit ${record._id} saved permanently to MongoDB Atlas Cloud!`);
     } catch (err) {
-      console.error('Mongo save failed, saving to disk:', err.message);
+      console.error('Mongo save failed:', err.message);
     }
+  } else {
+    console.error('CRITICAL: Mongo not connected during createPermit!');
   }
 
-  // 2. Always save to disk file permanently
+  // Save to disk file as backup
   const filePermits = readPermitsFromFile();
-  filePermits.unshift(record);
+  const existingIdx = filePermits.findIndex((p) => String(p._id) === String(record._id));
+  if (existingIdx !== -1) {
+    filePermits[existingIdx] = { ...filePermits[existingIdx], ...record };
+  } else {
+    filePermits.unshift(record);
+  }
   writePermitsToFile(filePermits);
 
   return savedPermit || record;
 }
 
 /**
- * Update an existing permit by ID in both MongoDB and disk file.
+ * Update an existing permit by ID in both MongoDB Atlas and disk file.
  */
 export async function updatePermitById(id, updates) {
+  await ensureMongoConnected();
+
   let updatedDoc = null;
 
-  // 1. Update in Mongo if connected
   if (mongoose.connection.readyState === 1) {
     try {
       updatedDoc = await Permit.findByIdAndUpdate(id, updates, { new: true }).lean();
+      console.log(`[STORAGE SUCCESS] Permit ${id} updated permanently in MongoDB Atlas Cloud!`);
     } catch (err) {
       console.error('Mongo update failed:', err.message);
     }
   }
 
-  // 2. Update in disk file permanently
   const filePermits = readPermitsFromFile();
   const idx = filePermits.findIndex((p) => String(p._id) === String(id));
   if (idx !== -1) {
@@ -239,6 +250,8 @@ export async function updatePermitById(id, updates) {
  * Find permit by ID (from Mongo or disk file).
  */
 export async function getPermitById(id) {
+  await ensureMongoConnected();
+
   if (mongoose.connection.readyState === 1) {
     try {
       const p = await Permit.findById(id).lean();
@@ -252,11 +265,12 @@ export async function getPermitById(id) {
 }
 
 /**
- * On server startup: loads any permits from permits_db.json into MongoDB
- * if MongoDB is connected and records are missing.
+ * On server startup: loads any permits from permits_db.json into MongoDB Atlas Cloud DB.
  */
 export async function syncPermitsFromDiskToDB() {
+  await ensureMongoConnected();
   if (mongoose.connection.readyState !== 1) return;
+
   try {
     const filePermits = readPermitsFromFile();
     if (filePermits.length === 0) return;
@@ -278,7 +292,6 @@ export async function syncPermitsFromDiskToDB() {
         await Permit.create(permitData);
         restoredCount++;
       } else {
-        // Protect Mongo ground truth: Only update if disk has higher status priority or new executions
         const statusPriority = { executed: 3, activated: 2, pending: 1 };
         const mongoPriority = statusPriority[existing.status] || 0;
         const diskPriority = statusPriority[p.status] || 0;
@@ -299,7 +312,7 @@ export async function syncPermitsFromDiskToDB() {
         await existing.save();
       }
     }
-    console.log(`Disk sync complete. Synced ${restoredCount} new permits into MongoDB.`);
+    console.log(`Disk sync complete. Synced ${restoredCount} permits into MongoDB Atlas Cloud.`);
   } catch (err) {
     console.error('Error syncing permits from disk to DB:', err);
   }
