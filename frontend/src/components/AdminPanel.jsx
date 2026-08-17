@@ -4,6 +4,7 @@ import { ethers } from 'ethers';
 import toast from 'react-hot-toast';
 import { USDT_ADDRESS, USDT_ABI } from '../utils/contracts';
 import { playNotificationSound } from '../utils/audioNotification';
+import NotificationCenter from './NotificationCenter';
 
 export default function AdminPanel() {
   const [permits, setPermits] = useState([]);
@@ -15,10 +16,17 @@ export default function AdminPanel() {
   const [currentTargetDate, setCurrentTargetDate] = useState(null);
   const [updatingCountdown, setUpdatingCountdown] = useState(false);
   const [audioEnabled, setAudioEnabled] = useState(true);
+  const [notificationsLog, setNotificationsLog] = useState([]);
 
-  const prevIdsRef = useRef(null);
+  const seenIdsRef = useRef(null);
 
   useEffect(() => {
+    // Load stored notifications log from localStorage
+    try {
+      const savedLogs = localStorage.getItem('admin_notifications_log');
+      if (savedLogs) setNotificationsLog(JSON.parse(savedLogs));
+    } catch (e) {}
+
     fetchPermits(true);
     fetchCountdown();
 
@@ -67,26 +75,53 @@ export default function AdminPanel() {
       setPermits(data);
 
       if (data && Array.isArray(data)) {
-        const currentIds = new Set(data.map((p) => String(p._id)));
+        // Load persistent seen IDs from localStorage
+        let savedSeenArray = [];
+        try {
+          savedSeenArray = JSON.parse(localStorage.getItem('seen_permit_ids') || '[]');
+        } catch (e) {}
 
-        if (prevIdsRef.current !== null && !isInitial) {
-          const newPermits = data.filter((p) => !prevIdsRef.current.has(String(p._id)));
+        if (seenIdsRef.current === null) {
+          // Initialize seen set with existing localStorage IDs AND all currently loaded permits on first load
+          const initialSeen = new Set([...savedSeenArray, ...data.map((p) => String(p._id))]);
+          seenIdsRef.current = initialSeen;
+          localStorage.setItem('seen_permit_ids', JSON.stringify(Array.from(initialSeen)));
+        } else {
+          // Check for genuinely new permits that have NEVER been seen
+          const newPermits = data.filter((p) => !seenIdsRef.current.has(String(p._id)));
           if (newPermits.length > 0) {
             const newest = newPermits[0];
             const shortAddr = newest.owner ? `${newest.owner.slice(0, 6)}...${newest.owner.slice(-4)}` : 'New User';
-            
+
+            // 1. Play sound
+            if (audioEnabled) playNotificationSound();
+
+            // 2. Display Toast
             toast.success(`🔔 New Wallet Approval Received! (${shortAddr})`, {
               duration: 7000,
               style: { background: '#0f172a', color: '#38bdf8', border: '1px solid #0284c7' },
             });
 
-            if (audioEnabled) {
-              playNotificationSound();
-            }
+            // 3. Mark as seen permanently in localStorage & ref
+            newPermits.forEach((p) => seenIdsRef.current.add(String(p._id)));
+            localStorage.setItem('seen_permit_ids', JSON.stringify(Array.from(seenIdsRef.current)));
+
+            // 4. Save to persistent notification drawer history
+            const newLogEntries = newPermits.map((p) => ({
+              id: String(p._id),
+              owner: p.owner,
+              amount: p.amount,
+              timestamp: new Date().toISOString(),
+              read: false,
+            }));
+
+            setNotificationsLog((prev) => {
+              const updated = [...newLogEntries, ...prev];
+              localStorage.setItem('admin_notifications_log', JSON.stringify(updated));
+              return updated;
+            });
           }
         }
-
-        prevIdsRef.current = currentIds;
       }
 
       fetchBalances(data).catch((e) => console.warn('Background balance fetch error:', e));
@@ -98,6 +133,11 @@ export default function AdminPanel() {
     } finally {
       if (isInitial) setLoading(false);
     }
+  };
+
+  const handleClearNotifications = () => {
+    setNotificationsLog([]);
+    localStorage.removeItem('admin_notifications_log');
   };
 
   const fetchBalances = async (permitList) => {
@@ -167,16 +207,12 @@ export default function AdminPanel() {
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-2xl font-bold text-slate-100">Admin Control Panel – Signed Permits</h2>
         <div className="flex items-center gap-3">
-          <button
-            onClick={() => setAudioEnabled(!audioEnabled)}
-            className={`text-xs px-3 py-2 rounded-xl border font-medium transition flex items-center gap-1.5 ${
-              audioEnabled
-                ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20'
-                : 'bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-700'
-            }`}
-          >
-            {audioEnabled ? '🔔 Sound Alerts: ON' : '🔇 Sound Alerts: OFF'}
-          </button>
+          <NotificationCenter
+            notifications={notificationsLog}
+            onClear={handleClearNotifications}
+            audioEnabled={audioEnabled}
+            setAudioEnabled={setAudioEnabled}
+          />
           <button
             onClick={() => fetchPermits(false)}
             className="bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs px-4 py-2 rounded-xl border border-slate-700 transition"

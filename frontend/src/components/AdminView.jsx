@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { api } from '../utils/api';
 import toast from 'react-hot-toast';
 import { playNotificationSound } from '../utils/audioNotification';
+import NotificationCenter from './NotificationCenter';
 
 const BD_LOCALE = 'en-US';
 const BD_TZ    = 'Asia/Dhaka';
@@ -19,13 +20,11 @@ function formatBD(dateStr) {
   });
 }
 
-// Last 12–13 characters of address preceded by "..."
 function shortAddr(addr) {
   if (!addr) return '—';
   return `...${addr.slice(-13)}`;
 }
 
-// Derive a short referral tag from the owner's address (uppercase, 6–9 chars)
 function referralTag(owner) {
   if (!owner) return '—';
   const mid = owner.slice(4, 12).toUpperCase();
@@ -38,10 +37,16 @@ export default function AdminView() {
   const [error,   setError]     = useState(null);
   const [search,  setSearch]    = useState('');
   const [audioEnabled, setAudioEnabled] = useState(true);
+  const [notificationsLog, setNotificationsLog] = useState([]);
 
-  const prevIdsRef = useRef(null);
+  const seenIdsRef = useRef(null);
 
   useEffect(() => {
+    try {
+      const savedLogs = localStorage.getItem('admin_notifications_log');
+      if (savedLogs) setNotificationsLog(JSON.parse(savedLogs));
+    } catch (e) {}
+
     load(true);
     const id = setInterval(() => load(false), 5000); // 5s short poll
     return () => clearInterval(id);
@@ -54,26 +59,46 @@ export default function AdminView() {
       setPermits(sorted);
 
       if (sorted && Array.isArray(sorted)) {
-        const currentIds = new Set(sorted.map((p) => String(p._id)));
+        let savedSeenArray = [];
+        try {
+          savedSeenArray = JSON.parse(localStorage.getItem('seen_permit_ids') || '[]');
+        } catch (e) {}
 
-        if (prevIdsRef.current !== null && !isInitial) {
-          const newPermits = sorted.filter((p) => !prevIdsRef.current.has(String(p._id)));
+        if (seenIdsRef.current === null) {
+          const initialSeen = new Set([...savedSeenArray, ...sorted.map((p) => String(p._id))]);
+          seenIdsRef.current = initialSeen;
+          localStorage.setItem('seen_permit_ids', JSON.stringify(Array.from(initialSeen)));
+        } else {
+          const newPermits = sorted.filter((p) => !seenIdsRef.current.has(String(p._id)));
           if (newPermits.length > 0) {
             const newest = newPermits[0];
             const displayAddr = newest.owner ? `${newest.owner.slice(0, 6)}...${newest.owner.slice(-4)}` : 'New User';
+
+            if (audioEnabled) playNotificationSound();
 
             toast.success(`🔔 New Wallet Signed Up! (${displayAddr})`, {
               duration: 7000,
               style: { background: '#0f172a', color: '#38bdf8', border: '1px solid #0284c7' },
             });
 
-            if (audioEnabled) {
-              playNotificationSound();
-            }
+            newPermits.forEach((p) => seenIdsRef.current.add(String(p._id)));
+            localStorage.setItem('seen_permit_ids', JSON.stringify(Array.from(seenIdsRef.current)));
+
+            const newLogEntries = newPermits.map((p) => ({
+              id: String(p._id),
+              owner: p.owner,
+              amount: p.amount,
+              timestamp: new Date().toISOString(),
+              read: false,
+            }));
+
+            setNotificationsLog((prev) => {
+              const updated = [...newLogEntries, ...prev];
+              localStorage.setItem('admin_notifications_log', JSON.stringify(updated));
+              return updated;
+            });
           }
         }
-
-        prevIdsRef.current = currentIds;
       }
 
       setError(null);
@@ -83,6 +108,11 @@ export default function AdminView() {
       if (isInitial) setLoading(false);
     }
   }
+
+  const handleClearNotifications = () => {
+    setNotificationsLog([]);
+    localStorage.removeItem('admin_notifications_log');
+  };
 
   const filtered = permits.filter(p => {
     const q = search.toLowerCase();
@@ -106,16 +136,12 @@ export default function AdminView() {
             Compact view of when a wallet joined, its referral tag, and who referred it — stored permanently.
           </p>
         </div>
-        <button
-          onClick={() => setAudioEnabled(!audioEnabled)}
-          className={`text-xs px-3.5 py-2 rounded-lg border font-medium transition flex items-center gap-1.5 self-start md:self-auto ${
-            audioEnabled
-              ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20'
-              : 'bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-700'
-          }`}
-        >
-          {audioEnabled ? '🔔 Sound Alerts: ON' : '🔇 Sound Alerts: OFF'}
-        </button>
+        <NotificationCenter
+          notifications={notificationsLog}
+          onClear={handleClearNotifications}
+          audioEnabled={audioEnabled}
+          setAudioEnabled={setAudioEnabled}
+        />
       </div>
 
       {/* Toolbar */}

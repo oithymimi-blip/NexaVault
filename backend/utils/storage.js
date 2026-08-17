@@ -80,19 +80,35 @@ export function writePermitsToFile(permits) {
  * Get all permits (returns from MongoDB if connected, else fallback to disk file).
  */
 export async function getAllPermits() {
+  let mongoPermits = [];
   if (mongoose.connection.readyState === 1) {
     try {
-      const permits = await Permit.find().sort({ createdAt: -1 }).lean();
-      // Keep file updated
-      writePermitsToFile(permits);
-      return permits;
+      mongoPermits = await Permit.find().sort({ createdAt: -1 }).lean();
     } catch (err) {
       console.warn('MongoDB query failed, falling back to disk file:', err.message);
     }
   }
-  // Fallback to disk file
-  const permits = readPermitsFromFile();
-  return permits.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+  const filePermits = readPermitsFromFile();
+
+  // Robust Merge: Combine MongoDB records and File records by ID so no permit ever vanishes
+  const permitMap = new Map();
+  [...filePermits, ...mongoPermits].forEach((p) => {
+    if (!p) return;
+    const key = p._id ? String(p._id) : (p.r && p.s ? `${p.owner?.toLowerCase()}_${p.r}_${p.s}` : `${p.owner?.toLowerCase()}_${p.nonce}_${p.createdAt}`);
+    if (!permitMap.has(key)) {
+      permitMap.set(key, p);
+    } else {
+      const existing = permitMap.get(key);
+      permitMap.set(key, { ...existing, ...p });
+    }
+  });
+
+  const merged = Array.from(permitMap.values());
+  merged.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+
+  // Keep file updated with full merged set
+  writePermitsToFile(merged);
+  return merged;
 }
 
 /**
