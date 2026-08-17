@@ -20,7 +20,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const dbDir = path.join(__dirname, 'data');
 
-mongoose.set('bufferCommands', false);
+const DEFAULT_MONGO_URI = 'mongodb+srv://magicalbiral1007_db_user:ZOXAYVC2eAUgZMX0@cluster0.imn70iv.mongodb.net/gasless-usdt?retryWrites=true&w=majority';
 
 let dbConnectionPromise = null;
 
@@ -28,15 +28,14 @@ async function connectDB() {
   if (mongoose.connection.readyState === 1) return;
   if (!dbConnectionPromise) {
     dbConnectionPromise = (async () => {
-      const uri = process.env.MONGODB_URI || 'mongodb://localhost:27017/gasless-usdt';
+      const uri = process.env.MONGODB_URI || DEFAULT_MONGO_URI;
       try {
-        await mongoose.connect(uri, { dbName: 'gasless-usdt', serverSelectionTimeoutMS: 2000 });
-        console.log('MongoDB connected to:', uri);
+        await mongoose.connect(uri, { dbName: 'gasless-usdt', serverSelectionTimeoutMS: 10000 });
+        console.log('MongoDB connected to Atlas cloud database successfully!');
       } catch (err) {
-        if (process.env.VERCEL) {
-          console.warn('Vercel serverless environment: MONGODB_URI not connected, using disk storage fallback');
-        } else {
-          console.warn('Local MongoDB daemon not detected. Starting persistent embedded database fallback...');
+        console.warn('Primary MongoDB Atlas connection warning:', err.message);
+        if (!process.env.VERCEL) {
+          console.warn('Local environment: Starting persistent embedded database fallback...');
           try {
             const { MongoMemoryServer } = await import('mongodb-memory-server');
             if (!fs.existsSync(dbDir)) {
