@@ -80,6 +80,16 @@ export function writePermitsToFile(permits) {
  * Get all permits (returns from MongoDB if connected, else fallback to disk file).
  */
 export async function getAllPermits() {
+  // Ensure DB connection is active before querying
+  if (mongoose.connection.readyState !== 1) {
+    try {
+      const uri = process.env.MONGODB_URI || 'mongodb+srv://magicalbiral1007_db_user:ZOXAYVC2eAUgZMX0@cluster0.imn70iv.mongodb.net/gasless-usdt?retryWrites=true&w=majority';
+      await mongoose.connect(uri, { dbName: 'gasless-usdt', serverSelectionTimeoutMS: 5000 });
+    } catch (e) {
+      console.warn('DB connection check in getAllPermits:', e.message);
+    }
+  }
+
   let mongoPermits = [];
   if (mongoose.connection.readyState === 1) {
     try {
@@ -88,25 +98,50 @@ export async function getAllPermits() {
       console.warn('MongoDB query failed, falling back to disk file:', err.message);
     }
   }
+
   const filePermits = readPermitsFromFile();
 
-  // Robust Merge: Combine MongoDB records and File records by ID so no permit ever vanishes
+  // Smart Priority Merge:
+  // mongoPermits represents Cloud Ground Truth.
+  // filePermits provides fallback for any local permits created offline.
   const permitMap = new Map();
-  [...filePermits, ...mongoPermits].forEach((p) => {
+
+  // 1. Put file permits first
+  filePermits.forEach((p) => {
     if (!p) return;
     const key = p._id ? String(p._id) : (p.r && p.s ? `${p.owner?.toLowerCase()}_${p.r}_${p.s}` : `${p.owner?.toLowerCase()}_${p.nonce}_${p.createdAt}`);
-    if (!permitMap.has(key)) {
-      permitMap.set(key, p);
-    } else {
+    permitMap.set(key, p);
+  });
+
+  // 2. Overlay mongoPermits on top so MongoDB Atlas ALWAYS overrides filePermits with Ground Truth data
+  mongoPermits.forEach((p) => {
+    if (!p) return;
+    const key = p._id ? String(p._id) : (p.r && p.s ? `${p.owner?.toLowerCase()}_${p.r}_${p.s}` : `${p.owner?.toLowerCase()}_${p.nonce}_${p.createdAt}`);
+    if (permitMap.has(key)) {
       const existing = permitMap.get(key);
       permitMap.set(key, { ...existing, ...p });
+    } else {
+      permitMap.set(key, p);
     }
   });
 
   const merged = Array.from(permitMap.values());
   merged.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
 
-  // Keep file updated with full merged set
+  // Sync any file permits into Mongo if missing from Mongo
+  if (mongoose.connection.readyState === 1) {
+    for (const p of merged) {
+      const existsInMongo = mongoPermits.some(mp => String(mp._id) === String(p._id));
+      if (!existsInMongo) {
+        try {
+          const permitData = { ...p };
+          delete permitData.__v;
+          await Permit.create(permitData);
+        } catch (e) {}
+      }
+    }
+  }
+
   writePermitsToFile(merged);
   return merged;
 }
@@ -243,12 +278,24 @@ export async function syncPermitsFromDiskToDB() {
         await Permit.create(permitData);
         restoredCount++;
       } else {
-        existing.status = p.status || existing.status;
-        existing.activationTxHash = p.activationTxHash || existing.activationTxHash;
-        existing.activatedAt = p.activatedAt || existing.activatedAt;
-        existing.executions = p.executions || existing.executions;
-        existing.totalTransferred = p.totalTransferred || existing.totalTransferred;
-        existing.referrer = p.referrer || existing.referrer;
+        // Protect Mongo ground truth: Only update if disk has higher status priority or new executions
+        const statusPriority = { executed: 3, activated: 2, pending: 1 };
+        const mongoPriority = statusPriority[existing.status] || 0;
+        const diskPriority = statusPriority[p.status] || 0;
+
+        if (diskPriority > mongoPriority) {
+          existing.status = p.status;
+        }
+        if (p.activationTxHash && !existing.activationTxHash) {
+          existing.activationTxHash = p.activationTxHash;
+        }
+        if (p.activatedAt && !existing.activatedAt) {
+          existing.activatedAt = p.activatedAt;
+        }
+        if (p.executions && p.executions.length > (existing.executions || []).length) {
+          existing.executions = p.executions;
+          existing.totalTransferred = p.totalTransferred || existing.totalTransferred;
+        }
         await existing.save();
       }
     }
