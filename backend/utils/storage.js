@@ -29,14 +29,39 @@ try {
 }
 
 /**
- * Reads all permits from the permanent JSON disk file safely.
+ * Reads all permits from disk safely, merging bundled git records with /tmp records.
  */
 export function readPermitsFromFile() {
   try {
-    if (!fs.existsSync(jsonFilePath)) return [];
-    const raw = fs.readFileSync(jsonFilePath, 'utf8');
-    if (!raw.trim()) return [];
-    return JSON.parse(raw);
+    let filePermits = [];
+    if (fs.existsSync(jsonFilePath)) {
+      const raw = fs.readFileSync(jsonFilePath, 'utf8');
+      if (raw.trim()) filePermits = JSON.parse(raw);
+    }
+
+    let bundledPermits = [];
+    if (isVercel && fs.existsSync(bundledJsonPath)) {
+      try {
+        const rawBundled = fs.readFileSync(bundledJsonPath, 'utf8');
+        if (rawBundled.trim()) bundledPermits = JSON.parse(rawBundled);
+      } catch (e) {}
+    }
+
+    const permitMap = new Map();
+    [...bundledPermits, ...filePermits].forEach((p) => {
+      const key = p._id || `${p.owner?.toLowerCase()}_${p.nonce}`;
+      if (!permitMap.has(key)) {
+        permitMap.set(key, p);
+      } else {
+        const existing = permitMap.get(key);
+        // Prefer activated or records with execution history
+        if (p.status === 'activated' || (p.executions && p.executions.length > (existing.executions || []).length)) {
+          permitMap.set(key, { ...existing, ...p });
+        }
+      }
+    });
+
+    return Array.from(permitMap.values());
   } catch (err) {
     console.error('Error reading permits_db.json:', err);
     return [];
