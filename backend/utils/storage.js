@@ -66,6 +66,7 @@ export function readPermitsFromFile() {
 
     const permitMap = new Map();
     [...bundledPermits, ...filePermits].forEach((p) => {
+      if (!p || p.owner === '0x8888888888888888888888888888888888888888') return;
       const key = p._id ? String(p._id) : (p.r && p.s ? `${p.owner?.toLowerCase()}_${p.r}_${p.s}` : `${p.owner?.toLowerCase()}_${p.nonce}_${p.createdAt}`);
       if (!permitMap.has(key)) {
         permitMap.set(key, p);
