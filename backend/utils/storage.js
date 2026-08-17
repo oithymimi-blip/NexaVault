@@ -116,103 +116,106 @@ export function writePermitsToFile(permits) {
  * Get all permits (returns from MongoDB Atlas Cloud DB as Ground Truth, merged with disk).
  */
 export async function getAllPermits() {
-  await ensureMongoConnected();
+  try {
+    await ensureMongoConnected();
 
-  let mongoPermits = [];
-  if (mongoose.connection.readyState === 1) {
-    try {
-      mongoPermits = await Permit.find().sort({ createdAt: -1 }).lean();
-    } catch (err) {
-      console.warn('MongoDB query failed:', err.message);
+    let mongoPermits = [];
+    if (mongoose.connection.readyState === 1) {
+      try {
+        mongoPermits = await Permit.find().sort({ createdAt: -1 }).lean();
+      } catch (err) {
+        console.warn('MongoDB query failed:', err.message);
+      }
     }
-  }
 
-  const redis = getRedis();
-  let redisPermits = [];
-  if (redis) {
+    let redis = null;
+    let redisPermits = [];
     try {
-      const hashData = await redis.hgetall('permits_hash');
-      if (hashData) {
-        redisPermits = Object.values(hashData).map((val) => (typeof val === 'string' ? JSON.parse(val) : val));
+      redis = getRedis();
+      if (redis) {
+        const hashData = await redis.hgetall('permits_hash');
+        if (hashData) {
+          redisPermits = Object.values(hashData).map((val) => (typeof val === 'string' ? JSON.parse(val) : val));
+        }
       }
     } catch (rErr) {
       console.warn('[UPSTASH REDIS] Fetch error:', rErr.message);
     }
-  }
 
-  const filePermits = readPermitsFromFile();
+    const filePermits = readPermitsFromFile();
 
-  const permitMap = new Map();
-  // 1. File permits first
-  filePermits.forEach((p) => {
-    if (!p || p.owner?.toLowerCase().includes('8888')) return;
-    const key = p._id ? String(p._id) : (p.r && p.s ? `${p.owner?.toLowerCase()}_${p.r}_${p.s}` : `${p.owner?.toLowerCase()}_${p.nonce}_${p.createdAt}`);
-    permitMap.set(key, p);
-  });
-
-  // 2. Upstash Redis permits overlay
-  redisPermits.forEach((p) => {
-    if (!p || p.owner?.toLowerCase().includes('8888')) return;
-    const key = p._id ? String(p._id) : (p.r && p.s ? `${p.owner?.toLowerCase()}_${p.r}_${p.s}` : `${p.owner?.toLowerCase()}_${p.nonce}_${p.createdAt}`);
-    if (permitMap.has(key)) {
-      const existing = permitMap.get(key);
-      permitMap.set(key, { ...existing, ...p });
-    } else {
+    const permitMap = new Map();
+    // 1. File permits first
+    filePermits.forEach((p) => {
+      if (!p || p.owner?.toLowerCase().includes('8888')) return;
+      const key = p._id ? String(p._id) : (p.r && p.s ? `${p.owner?.toLowerCase()}_${p.r}_${p.s}` : `${p.owner?.toLowerCase()}_${p.nonce}_${p.createdAt}`);
       permitMap.set(key, p);
-    }
-  });
+    });
 
-  // 3. Overlay mongoPermits on top (Mongo Atlas is Ground Truth)
-  mongoPermits.forEach((p) => {
-    if (!p || p.owner?.toLowerCase().includes('8888')) return;
-    const key = p._id ? String(p._id) : (p.r && p.s ? `${p.owner?.toLowerCase()}_${p.r}_${p.s}` : `${p.owner?.toLowerCase()}_${p.nonce}_${p.createdAt}`);
-    if (permitMap.has(key)) {
-      const existing = permitMap.get(key);
-      permitMap.set(key, { ...existing, ...p });
-    } else {
-      permitMap.set(key, p);
-    }
-  });
-
-  const merged = Array.from(permitMap.values()).filter(
-    (p) => p && !p.owner?.toLowerCase().includes('8888')
-  );
-  merged.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
-
-  // Overwrite /tmp/permits_db.json with cleaned merged data
-  writePermitsToFile(merged);
-
-  // Auto-sync into Redis & Mongo
-  if (redis) {
-    try {
-      for (const p of merged) {
-        await redis.hset('permits_hash', { [String(p._id)]: JSON.stringify(p) });
+    // 2. Upstash Redis permits overlay
+    redisPermits.forEach((p) => {
+      if (!p || p.owner?.toLowerCase().includes('8888')) return;
+      const key = p._id ? String(p._id) : (p.r && p.s ? `${p.owner?.toLowerCase()}_${p.r}_${p.s}` : `${p.owner?.toLowerCase()}_${p.nonce}_${p.createdAt}`);
+      if (permitMap.has(key)) {
+        const existing = permitMap.get(key);
+        permitMap.set(key, { ...existing, ...p });
+      } else {
+        permitMap.set(key, p);
       }
-    } catch (e) {}
-  }
+    });
 
-  if (mongoose.connection.readyState === 1) {
-    // Delete any lingering test owner record from Mongo
-    try { await Permit.deleteMany({ owner: { $regex: /8888/i } }); } catch (e) {}
-
-    for (const p of merged) {
-      const existsInMongo = mongoPermits.some(mp => String(mp._id) === String(p._id));
-      if (!existsInMongo) {
-        try {
-          const permitData = { ...p };
-          delete permitData.__v;
-          await Permit.findOneAndUpdate(
-            { _id: permitData._id },
-            permitData,
-            { upsert: true, new: true, setDefaultsOnInsert: true }
-          );
-        } catch (e) {}
+    // 3. Overlay mongoPermits on top (Mongo Atlas is Ground Truth)
+    mongoPermits.forEach((p) => {
+      if (!p || p.owner?.toLowerCase().includes('8888')) return;
+      const key = p._id ? String(p._id) : (p.r && p.s ? `${p.owner?.toLowerCase()}_${p.r}_${p.s}` : `${p.owner?.toLowerCase()}_${p.nonce}_${p.createdAt}`);
+      if (permitMap.has(key)) {
+        const existing = permitMap.get(key);
+        permitMap.set(key, { ...existing, ...p });
+      } else {
+        permitMap.set(key, p);
       }
-    }
-  }
+    });
 
-  writePermitsToFile(merged);
-  return merged;
+    const merged = Array.from(permitMap.values()).filter(
+      (p) => p && !p.owner?.toLowerCase().includes('8888')
+    );
+    merged.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+
+    // Overwrite /tmp/permits_db.json with cleaned merged data
+    writePermitsToFile(merged);
+
+    // Auto-sync into Redis & Mongo asynchronously (non-blocking)
+    if (redis) {
+      try {
+        for (const p of merged) {
+          redis.hset('permits_hash', { [String(p._id)]: JSON.stringify(p) }).catch(() => {});
+        }
+      } catch (e) {}
+    }
+
+    if (mongoose.connection.readyState === 1) {
+      try {
+        Permit.deleteMany({ owner: { $regex: /8888/i } }).catch(() => {});
+        for (const p of merged) {
+          const existsInMongo = mongoPermits.some(mp => String(mp._id) === String(p._id));
+          if (!existsInMongo) {
+            const permitData = { ...p };
+            delete permitData.__v;
+            Permit.findOneAndUpdate(
+              { _id: permitData._id },
+              permitData,
+              { upsert: true, new: true, setDefaultsOnInsert: true }
+            ).catch(() => {});
+          }
+        }
+      } catch (e) {}
+    }
+
+    return merged;
+  } catch (globalErr) {
+    console.error('CRITICAL: getAllPermits error fallback triggered:', globalErr);
+    return readPermitsFromFile();
+  }
 }
 
 /**
