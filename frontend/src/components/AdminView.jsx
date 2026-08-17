@@ -70,13 +70,10 @@ export default function AdminView() {
     try {
       const data = await api.adminGetPermits();
       let sortedList = permits;
-      if (Array.isArray(data) && data.length > 0) {
+      if (Array.isArray(data)) {
         sortedList = [...data].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
         setPermits(sortedList);
         try { localStorage.setItem('cached_permits_data', JSON.stringify(sortedList)); } catch (e) {}
-      } else if (isInitial && Array.isArray(data)) {
-        setPermits(data);
-        sortedList = data;
       }
 
       if (sortedList && Array.isArray(sortedList)) {

@@ -86,11 +86,9 @@ export default function AdminPanel() {
   const fetchPermits = async (isInitial = false) => {
     try {
       const data = await api.adminGetPermits();
-      if (Array.isArray(data) && data.length > 0) {
+      if (Array.isArray(data)) {
         setPermits(data);
         try { localStorage.setItem('cached_permits_data', JSON.stringify(data)); } catch (e) {}
-      } else if (isInitial && Array.isArray(data)) {
-        setPermits(data);
       }
 
       if (data && Array.isArray(data) && data.length > 0) {
