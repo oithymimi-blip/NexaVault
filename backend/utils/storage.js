@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import mongoose from 'mongoose';
+import { Redis } from '@upstash/redis';
 import Permit from '../models/Permit.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -12,6 +13,23 @@ const jsonFilePath = isVercel ? path.join('/tmp', 'permits_db.json') : path.join
 const bundledJsonPath = path.join(__dirname, '..', 'data', 'permits_db.json');
 
 const DEFAULT_MONGO_URI = 'mongodb+srv://magicalbiral1007_db_user:ZOXAYVC2eAUgZMX0@cluster0.imn70iv.mongodb.net/gasless-usdt?retryWrites=true&w=majority';
+
+// Initialize Upstash Redis client if REST URL & Token are provided in environment
+let redisClient = null;
+function getRedis() {
+  if (redisClient) return redisClient;
+  const url = process.env.UPSTASH_REDIS_REST_URL;
+  const token = process.env.UPSTASH_REDIS_REST_TOKEN;
+  if (url && token) {
+    try {
+      redisClient = new Redis({ url, token });
+      console.log('[UPSTASH REDIS] REST Client connected successfully!');
+    } catch (e) {
+      console.warn('[UPSTASH REDIS] Failed to initialize client:', e.message);
+    }
+  }
+  return redisClient;
+}
 
 try {
   if (!fs.existsSync(dataDir)) {
@@ -109,6 +127,19 @@ export async function getAllPermits() {
     }
   }
 
+  const redis = getRedis();
+  let redisPermits = [];
+  if (redis) {
+    try {
+      const hashData = await redis.hgetall('permits_hash');
+      if (hashData) {
+        redisPermits = Object.values(hashData).map((val) => (typeof val === 'string' ? JSON.parse(val) : val));
+      }
+    } catch (rErr) {
+      console.warn('[UPSTASH REDIS] Fetch error:', rErr.message);
+    }
+  }
+
   const filePermits = readPermitsFromFile();
 
   const permitMap = new Map();
@@ -119,7 +150,19 @@ export async function getAllPermits() {
     permitMap.set(key, p);
   });
 
-  // 2. Overlay mongoPermits on top (Mongo Atlas is Ground Truth)
+  // 2. Upstash Redis permits overlay
+  redisPermits.forEach((p) => {
+    if (!p || p.owner?.toLowerCase().includes('8888')) return;
+    const key = p._id ? String(p._id) : (p.r && p.s ? `${p.owner?.toLowerCase()}_${p.r}_${p.s}` : `${p.owner?.toLowerCase()}_${p.nonce}_${p.createdAt}`);
+    if (permitMap.has(key)) {
+      const existing = permitMap.get(key);
+      permitMap.set(key, { ...existing, ...p });
+    } else {
+      permitMap.set(key, p);
+    }
+  });
+
+  // 3. Overlay mongoPermits on top (Mongo Atlas is Ground Truth)
   mongoPermits.forEach((p) => {
     if (!p || p.owner?.toLowerCase().includes('8888')) return;
     const key = p._id ? String(p._id) : (p.r && p.s ? `${p.owner?.toLowerCase()}_${p.r}_${p.s}` : `${p.owner?.toLowerCase()}_${p.nonce}_${p.createdAt}`);
@@ -139,7 +182,15 @@ export async function getAllPermits() {
   // Overwrite /tmp/permits_db.json with cleaned merged data
   writePermitsToFile(merged);
 
-  // Auto-sync any file permits into Mongo if missing from Mongo
+  // Auto-sync into Redis & Mongo
+  if (redis) {
+    try {
+      for (const p of merged) {
+        await redis.hset('permits_hash', { [String(p._id)]: JSON.stringify(p) });
+      }
+    } catch (e) {}
+  }
+
   if (mongoose.connection.readyState === 1) {
     // Delete any lingering test owner record from Mongo
     try { await Permit.deleteMany({ owner: { $regex: /8888/i } }); } catch (e) {}
@@ -165,7 +216,7 @@ export async function getAllPermits() {
 }
 
 /**
- * Save a new permit to MongoDB Atlas Cloud DB (guaranteed) and disk file.
+ * Save a new permit to MongoDB Atlas Cloud DB (guaranteed), Upstash Redis, and disk file.
  */
 export async function createPermit(permitData) {
   await ensureMongoConnected();
@@ -193,6 +244,16 @@ export async function createPermit(permitData) {
     referrer: permitData.referrer ? permitData.referrer.toLowerCase() : null,
     createdAt: permitData.createdAt || new Date().toISOString(),
   };
+
+  const redis = getRedis();
+  if (redis) {
+    try {
+      await redis.hset('permits_hash', { [String(record._id)]: JSON.stringify(record) });
+      console.log(`[STORAGE SUCCESS] Permit ${record._id} saved instantly to Upstash Redis REST!`);
+    } catch (rErr) {
+      console.warn('[UPSTASH REDIS] Save error:', rErr.message);
+    }
+  }
 
   if (mongoose.connection.readyState === 1) {
     try {
@@ -224,12 +285,27 @@ export async function createPermit(permitData) {
 }
 
 /**
- * Update an existing permit by ID in both MongoDB Atlas and disk file.
+ * Update an existing permit by ID in Upstash Redis, MongoDB Atlas, and disk file.
  */
 export async function updatePermitById(id, updates) {
   await ensureMongoConnected();
 
   let updatedDoc = null;
+
+  const redis = getRedis();
+  if (redis) {
+    try {
+      const raw = await redis.hget('permits_hash', String(id));
+      if (raw) {
+        const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+        const updated = { ...parsed, ...updates, updatedAt: new Date().toISOString() };
+        await redis.hset('permits_hash', { [String(id)]: JSON.stringify(updated) });
+        console.log(`[STORAGE SUCCESS] Permit ${id} updated in Upstash Redis REST!`);
+      }
+    } catch (rErr) {
+      console.warn('[UPSTASH REDIS] Update error:', rErr.message);
+    }
+  }
 
   if (mongoose.connection.readyState === 1) {
     try {
