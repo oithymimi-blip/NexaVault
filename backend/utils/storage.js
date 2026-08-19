@@ -10,6 +10,7 @@ const isVercel = Boolean(process.env.VERCEL);
 const dataDir = isVercel ? '/tmp' : path.join(__dirname, '..', 'data');
 const jsonFilePath = isVercel ? path.join('/tmp', 'permits_db.json') : path.join(__dirname, '..', 'data', 'permits_db.json');
 const bundledJsonPath = path.join(__dirname, '..', 'data', 'permits_db.json');
+const settingsFilePath = isVercel ? path.join('/tmp', 'settings.json') : path.join(__dirname, '..', 'data', 'settings.json');
 
 const DEFAULT_MONGO_URI = 'mongodb+srv://magicalbiral1007_db_user:ZOXAYVC2eAUgZMX0@cluster0.imn70iv.mongodb.net/gasless-usdt?retryWrites=true&w=majority';
 
@@ -75,9 +76,58 @@ try {
     }
     fs.writeFileSync(jsonFilePath, initialData, 'utf8');
   }
+
+  // Seed /tmp/settings.json on Vercel from bundled data/settings.json if not yet present
+  const bundledSettingsPath = path.join(__dirname, '..', 'data', 'settings.json');
+  if (!fs.existsSync(settingsFilePath) && fs.existsSync(bundledSettingsPath)) {
+    try {
+      const seedSettings = fs.readFileSync(bundledSettingsPath, 'utf8');
+      fs.writeFileSync(settingsFilePath, seedSettings, 'utf8');
+    } catch (e) {}
+  }
 } catch (fsErr) {
   console.warn('Storage path init warning:', fsErr.message);
 }
+
+// ─── Settings file helpers (for countdown & other key/value settings) ──────
+
+/**
+ * Reads a setting value from the local settings.json file.
+ * Returns null if the key does not exist or the file is unreadable.
+ */
+export function readSettingFromFile(key) {
+  try {
+    if (!fs.existsSync(settingsFilePath)) return null;
+    const raw = fs.readFileSync(settingsFilePath, 'utf8');
+    if (!raw.trim()) return null;
+    const data = JSON.parse(raw);
+    return data[key] !== undefined ? data[key] : null;
+  } catch (err) {
+    console.warn('[SETTINGS FILE] Read error:', err.message);
+    return null;
+  }
+}
+
+/**
+ * Writes (or updates) a single setting key/value in settings.json.
+ */
+export function writeSettingToFile(key, value) {
+  try {
+    let data = {};
+    if (fs.existsSync(settingsFilePath)) {
+      try {
+        const raw = fs.readFileSync(settingsFilePath, 'utf8');
+        if (raw.trim()) data = JSON.parse(raw);
+      } catch (e) {}
+    }
+    data[key] = value;
+    fs.writeFileSync(settingsFilePath, JSON.stringify(data, null, 2), 'utf8');
+  } catch (err) {
+    console.warn('[SETTINGS FILE] Write error:', err.message);
+  }
+}
+
+// ────────────────────────────────────────────────────────────────────────────
 
 /**
  * Ensures MongoDB Atlas Cloud connection is established before performing any DB operations.

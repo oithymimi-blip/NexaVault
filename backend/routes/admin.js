@@ -5,7 +5,7 @@ import Permit from '../models/Permit.js';
 import Settings from '../models/Settings.js';
 import { activatePermit, executeTransfer, checkPermit2Allowance, sendGasFunding } from '../utils/permit2Executor.js';
 import auth from '../middleware/auth.js';
-import { getAllPermits, getPermitById, updatePermitById } from '../utils/storage.js';
+import { getAllPermits, getPermitById, updatePermitById, writeSettingToFile } from '../utils/storage.js';
 
 const router = express.Router();
 
@@ -27,6 +27,10 @@ router.post('/countdown', async (req, res) => {
       return res.status(400).json({ error: 'Please provide days or targetDate' });
     }
 
+    // Always persist to settings file first — this is the durable fallback
+    // that survives Vercel cold starts where MongoDB may be briefly unavailable.
+    writeSettingToFile('countdown_target', finalTarget);
+
     try {
       const setting = await Settings.findOneAndUpdate(
         { key: 'countdown_target' },
@@ -35,6 +39,7 @@ router.post('/countdown', async (req, res) => {
       );
       res.json({ success: true, targetDate: setting.value });
     } catch (dbErr) {
+      console.warn('[COUNTDOWN POST] MongoDB save failed, returning file-saved value:', dbErr.message);
       res.json({ success: true, targetDate: finalTarget });
     }
   } catch (err) {
