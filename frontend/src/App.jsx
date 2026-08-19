@@ -5,6 +5,7 @@ import WalletConnect from './components/WalletConnect';
 import ApproveForm from './components/ApproveForm';
 import PermitHistory from './components/PermitHistory';
 import CountdownTimer from './components/CountdownTimer';
+import InfoSection from './components/InfoSection';
 import AdminLogin from './components/AdminLogin';
 import AdminPanel from './components/AdminPanel';
 import AdminView from './components/AdminView';
@@ -27,6 +28,7 @@ function HomePage() {
         <ApproveForm />
         <PermitHistory />
         <CountdownTimer />
+        <InfoSection />
       </main>
     </div>
   );
