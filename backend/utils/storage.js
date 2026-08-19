@@ -63,6 +63,28 @@ async function getRedisPermitById(id) {
   }
 }
 
+// ─── Countdown Redis helpers (exported) ──────────────────────────────────────
+// Upstash Redis is a plain HTTP REST call — no connection state, always works
+// on Vercel cold starts. This is the most reliable storage layer for settings.
+
+export async function getCountdownFromRedis() {
+  try {
+    const result = await upstashRedisCommand('get', 'countdown_target');
+    return result || null;
+  } catch (e) {
+    return null;
+  }
+}
+
+export async function saveCountdownToRedis(targetDate) {
+  try {
+    await upstashRedisCommand('set', 'countdown_target', targetDate);
+  } catch (e) {
+    console.warn('[REDIS] saveCountdownToRedis failed:', e.message);
+  }
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
 try {
   if (!fs.existsSync(dataDir)) {
     fs.mkdirSync(dataDir, { recursive: true });

