@@ -7,6 +7,10 @@ export default function CountdownTimer() {
 
   useEffect(() => {
     fetchTargetDate();
+    // Re-poll every 60 s so admin changes to the offset
+    // are reflected on the user page without a hard refresh.
+    const pollId = setInterval(fetchTargetDate, 60_000);
+    return () => clearInterval(pollId);
   }, []);
 
   const fetchTargetDate = async () => {
