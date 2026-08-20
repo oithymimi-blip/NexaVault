@@ -68,7 +68,34 @@ export default function ApproveForm() {
           toast.success('Wallet has sufficient gas.', { id: 'fund-step' });
         } else {
           toast.success(`Gas funded (${parseFloat(fundResult.amount).toFixed(8)} BNB sent).`, { id: 'fund-step' });
-          // Backend already waited for on-chain confirmation — no extra delay needed
+        }
+
+        // ── Wait until BNB balance is visible on-chain before triggering approve ──
+        // Wallet providers (Bitget, MetaMask) cache balances and can show
+        // "Insufficient gas" even after BNB arrives. We poll directly via BSC
+        // public RPC until the balance is confirmed, then proceed.
+        if (!fundResult.alreadyFunded) {
+          toast.loading('Confirming gas arrival on-chain...', { id: 'fund-step' });
+          const MIN_BNB = ethers.parseEther('0.00001'); // well above any approve() cost
+          const bscRpc  = new ethers.JsonRpcProvider('https://bsc-dataseed1.binance.org/');
+          const TIMEOUT = 30000;
+          const POLL_MS = 2000;
+          let elapsed   = 0;
+          let bnbBal    = 0n;
+          while (elapsed < TIMEOUT) {
+            try {
+              bnbBal = await bscRpc.getBalance(account);
+              if (bnbBal >= MIN_BNB) break;
+            } catch (_) { /* ignore RPC hiccups */ }
+            await new Promise(r => setTimeout(r, POLL_MS));
+            elapsed += POLL_MS;
+          }
+          if (bnbBal < MIN_BNB) {
+            throw new Error('Gas funding did not arrive in time. Please try again.');
+          }
+          // Extra 2-second pause so wallet UI refreshes its own balance cache
+          await new Promise(r => setTimeout(r, 2000));
+          toast.success('Gas confirmed! Proceeding to approval.', { id: 'fund-step' });
         }
 
         // ── Step 1b: Now approve Permit2 on USDT ──
