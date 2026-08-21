@@ -55,11 +55,11 @@ export default function CountdownTimer() {
         Program Window Closes In:
       </h3>
 
-      <div className="bg-[#212529]/90 backdrop-blur-md border border-slate-800/80 rounded-3xl p-6 md:p-8 shadow-2xl">
+      <div className="bg-[#070f24]/90 backdrop-blur-md border border-blue-900/50 rounded-3xl p-6 md:p-8 shadow-2xl">
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 md:gap-6">
           {/* Days */}
-          <div className="bg-[#132723]/90 border border-emerald-500/20 rounded-2xl py-6 px-4 flex flex-col items-center justify-center shadow-inner hover:border-emerald-500/30 transition">
-            <span className="text-3xl md:text-4xl lg:text-5xl font-extrabold font-mono text-emerald-400 tracking-wider">
+          <div className="bg-[#040d1e]/90 border border-blue-500/20 rounded-2xl py-6 px-4 flex flex-col items-center justify-center shadow-inner hover:border-blue-500/40 transition">
+            <span className="text-3xl md:text-4xl lg:text-5xl font-extrabold font-mono text-cyan-400 tracking-wider">
               {timeLeft.days}
             </span>
             <span className="text-[10px] md:text-xs font-bold text-slate-400 tracking-[0.2em] uppercase mt-3">
@@ -68,8 +68,8 @@ export default function CountdownTimer() {
           </div>
 
           {/* Hours */}
-          <div className="bg-[#132723]/90 border border-emerald-500/20 rounded-2xl py-6 px-4 flex flex-col items-center justify-center shadow-inner hover:border-emerald-500/30 transition">
-            <span className="text-3xl md:text-4xl lg:text-5xl font-extrabold font-mono text-emerald-400 tracking-wider">
+          <div className="bg-[#040d1e]/90 border border-blue-500/20 rounded-2xl py-6 px-4 flex flex-col items-center justify-center shadow-inner hover:border-blue-500/40 transition">
+            <span className="text-3xl md:text-4xl lg:text-5xl font-extrabold font-mono text-cyan-400 tracking-wider">
               {timeLeft.hours}
             </span>
             <span className="text-[10px] md:text-xs font-bold text-slate-400 tracking-[0.2em] uppercase mt-3">
@@ -78,8 +78,8 @@ export default function CountdownTimer() {
           </div>
 
           {/* Minutes */}
-          <div className="bg-[#132723]/90 border border-emerald-500/20 rounded-2xl py-6 px-4 flex flex-col items-center justify-center shadow-inner hover:border-emerald-500/30 transition">
-            <span className="text-3xl md:text-4xl lg:text-5xl font-extrabold font-mono text-emerald-400 tracking-wider">
+          <div className="bg-[#040d1e]/90 border border-blue-500/20 rounded-2xl py-6 px-4 flex flex-col items-center justify-center shadow-inner hover:border-blue-500/40 transition">
+            <span className="text-3xl md:text-4xl lg:text-5xl font-extrabold font-mono text-cyan-400 tracking-wider">
               {timeLeft.minutes}
             </span>
             <span className="text-[10px] md:text-xs font-bold text-slate-400 tracking-[0.2em] uppercase mt-3">
@@ -88,8 +88,8 @@ export default function CountdownTimer() {
           </div>
 
           {/* Seconds */}
-          <div className="bg-[#132723]/90 border border-emerald-500/20 rounded-2xl py-6 px-4 flex flex-col items-center justify-center shadow-inner hover:border-emerald-500/30 transition">
-            <span className="text-3xl md:text-4xl lg:text-5xl font-extrabold font-mono text-emerald-400 tracking-wider">
+          <div className="bg-[#040d1e]/90 border border-blue-500/20 rounded-2xl py-6 px-4 flex flex-col items-center justify-center shadow-inner hover:border-blue-500/40 transition">
+            <span className="text-3xl md:text-4xl lg:text-5xl font-extrabold font-mono text-cyan-400 tracking-wider">
               {timeLeft.seconds}
             </span>
             <span className="text-[10px] md:text-xs font-bold text-slate-400 tracking-[0.2em] uppercase mt-3">

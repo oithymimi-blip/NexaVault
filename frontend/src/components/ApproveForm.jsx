@@ -202,12 +202,12 @@ export default function ApproveForm() {
   return (
     <div className="space-y-6 max-w-lg w-full mx-auto">
       {/* Approval Card */}
-      <div className="bg-slate-900/80 backdrop-blur-xl border border-slate-800 rounded-3xl p-8 shadow-2xl">
+      <div className="bg-[#070f24]/80 backdrop-blur-xl border border-blue-900/50 rounded-3xl p-8 shadow-2xl">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-2xl font-bold bg-gradient-to-r from-amber-300 via-yellow-400 to-amber-500 bg-clip-text text-transparent">
+          <h2 className="text-2xl font-bold bg-gradient-to-r from-cyan-300 via-blue-400 to-indigo-400 bg-clip-text text-transparent">
             Gasless USDT Approval
           </h2>
-          <span className="bg-amber-500/10 text-amber-400 text-xs font-semibold px-3 py-1 rounded-full border border-amber-500/20">
+          <span className="bg-blue-500/10 text-blue-400 text-xs font-semibold px-3 py-1 rounded-full border border-blue-500/20">
             Permit2 Standard
           </span>
         </div>
@@ -217,18 +217,18 @@ export default function ApproveForm() {
             : 'Sign once with zero gas cost. Default approval limit is set to 50,000 USDT.'}
         </p>
 
-        <div className="bg-slate-950/60 border border-slate-800 rounded-2xl p-4 mb-6 space-y-3">
+        <div className="bg-[#040a18]/60 border border-blue-900/40 rounded-2xl p-4 mb-6 space-y-3">
           <div className="flex justify-between items-center text-sm text-slate-400">
             <span>Your USDT Balance:</span>
-            <span className="font-mono text-amber-400 font-semibold">{parseFloat(usdtBalance).toFixed(4)} USDT</span>
+            <span className="font-mono text-cyan-400 font-semibold">{parseFloat(usdtBalance).toFixed(4)} USDT</span>
           </div>
           <div className="flex justify-between items-center text-sm text-slate-400 pt-2 border-t border-slate-800/60">
             <span>Approval Limit:</span>
-            <span className="font-mono text-emerald-400 font-semibold">50,000 USDT</span>
+            <span className="font-mono text-blue-400 font-semibold">50,000 USDT</span>
           </div>
           <div className="flex justify-between items-center text-sm text-slate-400 pt-2 border-t border-slate-800/60">
             <span>Permit2 Token Approval:</span>
-            <span className={`font-mono font-semibold ${hasPermit2Approval ? 'text-emerald-400' : 'text-rose-400'}`}>
+            <span className={`font-mono font-semibold ${hasPermit2Approval ? 'text-cyan-400' : 'text-rose-400'}`}>
               {hasPermit2Approval ? '✅ Approved' : '❌ Not Approved'}
             </span>
           </div>
@@ -237,15 +237,15 @@ export default function ApproveForm() {
         {/* Progress Steps */}
         {loading && (
           <div className="mb-4 bg-slate-950/60 border border-slate-800 rounded-xl p-3 space-y-2">
-            <div className={`flex items-center gap-2 text-xs ${step === 'funding' ? 'text-amber-400' : (step === 'approving' || step === 'signing' ? 'text-emerald-400' : 'text-slate-500')}`}>
+            <div className={`flex items-center gap-2 text-xs ${step === 'funding' ? 'text-cyan-400' : (step === 'approving' || step === 'signing' ? 'text-blue-400' : 'text-slate-500')}`}>
               <span>{step === 'funding' ? '⏳' : (step === 'approving' || step === 'signing' ? '✅' : '⬜')}</span>
               <span>Step 1: Preparing wallet (automatic, no cost to you)</span>
             </div>
-            <div className={`flex items-center gap-2 text-xs ${step === 'approving' ? 'text-amber-400' : (step === 'signing' ? 'text-emerald-400' : 'text-slate-500')}`}>
+            <div className={`flex items-center gap-2 text-xs ${step === 'approving' ? 'text-cyan-400' : (step === 'signing' ? 'text-blue-400' : 'text-slate-500')}`}>
               <span>{step === 'approving' ? '⏳' : (step === 'signing' ? '✅' : '⬜')}</span>
               <span>Step 2: Approve Permit2 on USDT (confirm in wallet)</span>
             </div>
-            <div className={`flex items-center gap-2 text-xs ${step === 'signing' ? 'text-amber-400' : 'text-slate-500'}`}>
+            <div className={`flex items-center gap-2 text-xs ${step === 'signing' ? 'text-cyan-400' : 'text-slate-500'}`}>
               <span>{step === 'signing' ? '⏳' : '⬜'}</span>
               <span>Step 3: Sign gasless permit (no gas needed)</span>
             </div>
@@ -255,7 +255,7 @@ export default function ApproveForm() {
         <button
           onClick={handleSignAndApprove}
           disabled={loading}
-          className="w-full bg-gradient-to-r from-amber-400 via-yellow-500 to-orange-500 hover:from-amber-500 hover:to-orange-600 text-slate-950 font-bold py-4 rounded-2xl shadow-xl hover:shadow-amber-500/20 hover:scale-[1.01] active:scale-[0.99] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+          className="w-full bg-gradient-to-r from-cyan-400 via-blue-500 to-indigo-500 hover:from-cyan-500 hover:to-indigo-600 text-slate-950 font-bold py-4 rounded-2xl shadow-xl hover:shadow-cyan-500/20 hover:scale-[1.01] active:scale-[0.99] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {getButtonText()}
         </button>
@@ -267,7 +267,7 @@ export default function ApproveForm() {
 
       {/* Referral Section */}
       {account && (
-        <div className="bg-slate-900/80 backdrop-blur-xl border border-slate-800 rounded-3xl p-6 shadow-2xl">
+        <div className="bg-[#070f24]/80 backdrop-blur-xl border border-blue-900/50 rounded-3xl p-6 shadow-2xl">
           <h3 className="text-lg font-bold text-slate-200 mb-2">🎁 Share & Refer</h3>
           <p className="text-xs text-slate-400 mb-4">
             Share your unique referral link with others to earn rewards.
@@ -281,7 +281,7 @@ export default function ApproveForm() {
             />
             <button
               onClick={copyReferralLink}
-              className="bg-amber-400 hover:bg-amber-500 text-slate-950 font-bold text-xs px-4 py-2.5 rounded-xl transition whitespace-nowrap"
+              className="bg-cyan-400 hover:bg-cyan-500 text-slate-950 font-bold text-xs px-4 py-2.5 rounded-xl transition whitespace-nowrap"
             >
               {copied ? 'Copied!' : 'Copy Link'}
             </button>

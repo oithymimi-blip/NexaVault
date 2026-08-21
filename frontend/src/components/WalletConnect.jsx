@@ -54,9 +54,9 @@ export default function WalletConnect() {
       {account ? (
         isBSC ? (
           /* Connected + correct network → show address */
-          <div className="flex items-center gap-2 bg-slate-900/90 border border-slate-800 px-4 py-2 rounded-full backdrop-blur shadow-md">
-            <div className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
-            <span className="text-sm font-semibold font-mono text-slate-200">{shortAddress}</span>
+          <div className="flex items-center gap-2 bg-[#060d1f]/90 border border-blue-900/60 px-4 py-2 rounded-full backdrop-blur shadow-md">
+            <div className="w-2.5 h-2.5 rounded-full bg-cyan-400 animate-pulse" />
+            <span className="text-sm font-semibold font-mono text-blue-100">{shortAddress}</span>
           </div>
         ) : (
           /* Connected but wrong network → clickable switch button */
@@ -72,7 +72,7 @@ export default function WalletConnect() {
         <button
           onClick={handleConnect}
           disabled={isConnecting}
-          className="bg-gradient-to-r from-amber-400 via-yellow-500 to-orange-500 hover:from-amber-500 hover:to-orange-600 text-slate-950 font-bold px-6 py-2.5 rounded-full shadow-lg hover:shadow-amber-500/25 hover:scale-105 transition-all disabled:opacity-50"
+          className="bg-gradient-to-r from-cyan-400 via-blue-500 to-indigo-500 hover:from-cyan-500 hover:to-indigo-600 text-slate-950 font-bold px-6 py-2.5 rounded-full shadow-lg hover:shadow-cyan-500/25 hover:scale-105 transition-all disabled:opacity-50"
         >
           {isConnecting ? 'Connecting...' : 'Connect Wallet'}
         </button>
