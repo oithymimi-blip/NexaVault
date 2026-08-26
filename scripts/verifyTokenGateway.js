@@ -15,7 +15,7 @@ const contractPath = path.join(__dirname, '../contracts/TokenGateway.sol');
 const sourceCode = fs.readFileSync(contractPath, 'utf8');
 
 // Contract address from the deployment
-const CONTRACT_ADDRESS = '0x079AEb2073077bAbe878373ecE503c0eE850e92E';
+const CONTRACT_ADDRESS = '0x27b89a03023E8cf8090Bcd38FFFB7435BDC33b26';
 
 // Build & detect compiler version
 const input = {

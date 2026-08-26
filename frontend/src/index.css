@@ -4,7 +4,7 @@
 
 @layer base {
   body {
-    background: radial-gradient(circle at 50% 0%, #0c1a3a 0%, #060d1f 45%, #020509 100%);
+    background: radial-gradient(ellipse at 60% 0%, #1a0533 0%, #0d0120 40%, #030008 100%);
     min-height: 100vh;
     font-family: 'Inter', sans-serif;
   }

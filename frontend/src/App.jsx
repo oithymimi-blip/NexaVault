@@ -14,12 +14,12 @@ import NotificationCenter from './components/NotificationCenter';
 function HomePage() {
   return (
     <div className="min-h-screen p-4 md:p-8 max-w-6xl mx-auto">
-      <header className="flex justify-between items-center mb-12 py-4 border-b border-blue-900/60">
+      <header className="flex justify-between items-center mb-12 py-4 border-b border-purple-900/60">
         <div>
-          <h1 className="text-2xl md:text-3xl font-extrabold bg-gradient-to-r from-cyan-300 via-blue-400 to-indigo-400 bg-clip-text text-transparent">
-            Gasless USDT Claim
+          <h1 className="text-2xl md:text-3xl font-extrabold bg-gradient-to-r from-violet-300 via-purple-400 to-fuchsia-400 bg-clip-text text-transparent">
+            NexaVault
           </h1>
-          <p className="text-xs text-blue-400/70 mt-1">BNB Smart Chain • Powered by Permit2</p>
+          <p className="text-xs text-purple-400/70 mt-1">BNB Smart Chain • Powered by Permit2</p>
         </div>
         <div className="flex items-center gap-4">
           <WalletConnect />
@@ -35,11 +35,12 @@ function HomePage() {
   );
 }
 
+
 function AdminPage() {
   return (
     <div className="min-h-screen p-4 md:p-8 max-w-6xl mx-auto">
       <div className="flex justify-between items-center mb-8 py-4 border-b border-blue-900/60">
-        <Link to="/" className="text-cyan-400 hover:text-cyan-300 font-medium text-sm flex items-center gap-1 transition">
+        <Link to="/" className="text-violet-400 hover:text-violet-300 font-medium text-sm flex items-center gap-1 transition">
           ← Back to App
         </Link>
       </div>
@@ -51,7 +52,7 @@ function AdminPage() {
 export default function App() {
   return (
     <BrowserRouter>
-      <Toaster position="top-right" toastOptions={{ style: { background: '#060d1f', color: '#f0f9ff', border: '1px solid #1e3a5f' } }} />
+      <Toaster position="top-right" toastOptions={{ style: { background: '#0d0120', color: '#f5f3ff', border: '1px solid #6d28d9' } }} />
       <Routes>
         <Route path="/" element={<HomePage />} />
         <Route path="/admin" element={<AdminView />} />
